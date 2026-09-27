@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.size
@@ -35,18 +36,24 @@ val kindLabels = linkedMapOf(
     "job" to "Job", "tip" to "Tip", "video" to "Video", "playlist" to "Playlist", "book" to "Book", "other" to "Other",
 )
 
+/**
+ * One fixed colour per kind, so kinds stay tell-apart-able even when Material You hands us a grey palette
+ * (monochrome wallpapers). Softer tints on dark, deeper ones on light.
+ */
 @Composable
 fun kindColor(kind: String): Color {
-    val s = MaterialTheme.colorScheme
-    return when (kind) {
-        "repo" -> s.primary
-        "tool" -> s.tertiary
-        "course", "cert" -> s.secondary
-        "job" -> Color(0xFF8FD3FF)
-        "video", "playlist" -> Color(0xFFFF8A80)
-        "book" -> Color(0xFFA5D6A7)
-        else -> s.outline
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val (onDark, onLight) = when (kind) {
+        "repo" -> 0xFF8AB4F8 to 0xFF1A5FB4       // blue
+        "tool" -> 0xFF81C995 to 0xFF1E7B45       // green
+        "course", "cert" -> 0xFFC58AF9 to 0xFF7B3FB8 // violet
+        "job" -> 0xFFFDD663 to 0xFF9A6A00        // amber
+        "video", "playlist" -> 0xFFF28B82 to 0xFFB3261E // coral
+        "book" -> 0xFF78D9EC to 0xFF00707F       // teal
+        "tip" -> 0xFFFCAD70 to 0xFFA0470A        // orange
+        else -> return MaterialTheme.colorScheme.outline
     }
+    return Color(if (dark) onDark else onLight)
 }
 
 fun trustLabel(trust: String) = when (trust) {

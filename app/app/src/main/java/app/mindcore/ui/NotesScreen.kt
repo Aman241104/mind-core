@@ -137,7 +137,7 @@ fun NotesScreen(api: Api?, state: NotesState, onOpen: (String) -> Unit, onNew: (
             item(span = StaggeredGridItemSpan.FullLine) {
                 Row(Modifier.padding(start = 6.dp, top = 20.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("${counts["idea"]} ideas · ${counts["note"]} notes", style = MaterialTheme.typography.labelLarge,
+                        Text("${plural(counts["idea"] ?: 0, "idea")} · ${plural(counts["note"] ?: 0, "note")}", style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary)
                         Text("Notes", style = MaterialTheme.typography.displaySmall)
                     }
@@ -332,3 +332,5 @@ private fun TalkItOut(api: Api, onDone: (String) -> Unit) {
         }
     }
 }
+
+private fun plural(n: Int, word: String) = "$n $word${if (n == 1) "" else "s"}"

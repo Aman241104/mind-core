@@ -155,19 +155,29 @@ fun BoardScreen(
             title = b.title; cards.clear(); cards.addAll(b.cards); edges.clear(); edges.addAll(b.edges); loaded = true
         }.onFailure { error = it.message }
     }
-    // Frame everything once the board and the screen size are known.
-    LaunchedEffect(loaded, view) {
-        if (!loaded || view.width == 0) return@LaunchedEffect
-        if (cards.isEmpty()) { scale = 1f; ox = view.width / 2f; oy = view.height / 2.6f; return@LaunchedEffect }
-        delay(50) // let cards measure
+    /** Frame every card (glides there when [animate]). */
+    suspend fun fitAll(animate: Boolean) {
+        if (cards.isEmpty() || view.width == 0) return
+        delay(60) // let new cards measure
         val w = with(density) { 180.dp.toPx() }
         val x0 = cards.minOf { it.x }; val x1 = cards.maxOf { it.x + (sizes[it.id]?.width ?: w.toInt()) }
         val y0 = cards.minOf { it.y }; val y1 = cards.maxOf { it.y + (sizes[it.id]?.height ?: w.toInt()) }
         val pad = with(density) { 40.dp.toPx() }
         val top = with(density) { 90.dp.toPx() }
-        scale = minOf((view.width - 2 * pad) / (x1 - x0), (view.height - top - with(density) { 160.dp.toPx() }) / (y1 - y0)).coerceIn(0.3f, 1.2f)
-        ox = view.width / 2f - (x0 + x1) / 2 * scale
-        oy = top + (view.height - top - with(density) { 120.dp.toPx() }) / 2f - (y0 + y1) / 2 * scale
+        val s1 = minOf((view.width - 2 * pad) / (x1 - x0), (view.height - top - with(density) { 160.dp.toPx() }) / (y1 - y0)).coerceIn(0.3f, 1.2f)
+        val tx = view.width / 2f - (x0 + x1) / 2 * s1
+        val ty = top + (view.height - top - with(density) { 120.dp.toPx() }) / 2f - (y0 + y1) / 2 * s1
+        if (!animate || !motionOn) { scale = s1; ox = tx; oy = ty; return }
+        val s0 = scale; val x0s = ox; val y0s = oy
+        Animatable(0f).animateTo(1f, tween(500, easing = FastOutSlowInEasing)) {
+            scale = s0 + (s1 - s0) * value; ox = x0s + (tx - x0s) * value; oy = y0s + (ty - y0s) * value
+        }
+    }
+    // Frame everything once the board and the screen size are known.
+    LaunchedEffect(loaded, view) {
+        if (!loaded || view.width == 0) return@LaunchedEffect
+        if (cards.isEmpty()) { scale = 1f; ox = view.width / 2f; oy = view.height / 2.6f; return@LaunchedEffect }
+        fitAll(animate = false)
     }
 
     suspend fun save() {
@@ -231,12 +241,14 @@ fun BoardScreen(
                     }
                 }
                 note = "Swan added ${ideas.size} ideas"
+                fitAll(animate = true)
             }.onFailure { note = it.message }
             thinking = false
         }
     }
 
     val scheme = MaterialTheme.colorScheme
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
     Box(Modifier.fillMaxSize().background(scheme.surface).onSizeChanged { view = it }) {
         if (!loaded) {
             Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -258,7 +270,7 @@ fun BoardScreen(
                             scale = s
                         }
                     }
-                    .pointerInput(boardId) { detectTapGestures(onTap = { selected = null; connecting = false }) },
+                    .pointerInput(boardId) { detectTapGestures(onTap = { selected = null; connecting = false; focus.clearFocus() }) },
             ) {
                 val step = 32.dp.toPx() * scale
                 if (step > 8f) {
@@ -333,7 +345,7 @@ fun BoardScreen(
                 ToolBar {
                     if (connecting) {
                         Text("Tap another card to connect or unlink", style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp))
+                            modifier = Modifier.weight(3f).padding(horizontal = 14.dp, vertical = 12.dp))
                         Tool(null, "Cancel") { connecting = false }
                     } else {
                         if (c.type == "text") Tool(Icons.Rounded.Edit, "Edit") { editing = cards.firstOrNull { it.id == c.id } }
@@ -357,14 +369,9 @@ fun BoardScreen(
                         editing = c
                     }
                     Tool(Icons.Rounded.PostAdd, "Add saved") { picking = true }
-                    Row(
-                        Modifier.clip(RoundedCornerShape(50)).background(scheme.inverseSurface).clickable(enabled = !thinking) { askSwan() }
-                            .padding(start = 8.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        LotusBlob(if (thinking) BlobState.Thinking else BlobState.Idle, size = 30.dp, onTap = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (thinking) "Thinking…" else "Swan, add ideas", style = MaterialTheme.typography.labelLarge, color = scheme.inverseOnSurface)
+                    Tool(null, if (thinking) "Thinking…" else "Swan ideas", strong = true,
+                        leading = { LotusBlob(if (thinking) BlobState.Thinking else BlobState.Idle, size = 22.dp, onTap = null) }) {
+                        if (!thinking) askSwan()
                     }
                 }
             }
@@ -401,21 +408,31 @@ fun BoardScreen(
     }
 }
 
+/** Full-width bar of equal buttons (icon over label), so every action fits on a phone. */
 @Composable
-private fun ToolBar(content: @Composable () -> Unit) {
+private fun ToolBar(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
     Row(
-        Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(6.dp)
-            .horizontalScroll(rememberScrollState()),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(6.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) { content() }
 }
 
 @Composable
-private fun Tool(icon: ImageVector?, label: String, onClick: () -> Unit) {
-    Row(Modifier.clip(RoundedCornerShape(50)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        icon?.let { Icon(it, null, Modifier.size(20.dp)); Spacer(Modifier.width(6.dp)) }
-        Text(label, style = MaterialTheme.typography.labelLarge)
+private fun androidx.compose.foundation.layout.RowScope.Tool(
+    icon: ImageVector?, label: String, strong: Boolean = false, leading: (@Composable () -> Unit)? = null, onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        Modifier.weight(1f).clip(RoundedCornerShape(22.dp)).background(if (strong) scheme.inverseSurface else Color.Transparent)
+            .clickable(onClick = onClick).padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        when {
+            leading != null -> leading()
+            icon != null -> Icon(icon, null, Modifier.size(22.dp), tint = if (strong) scheme.inverseOnSurface else scheme.onSurface)
+        }
+        Text(label, style = MaterialTheme.typography.labelMedium, color = if (strong) scheme.inverseOnSurface else scheme.onSurface,
+            maxLines = 1, modifier = Modifier.padding(top = 3.dp))
     }
 }
 

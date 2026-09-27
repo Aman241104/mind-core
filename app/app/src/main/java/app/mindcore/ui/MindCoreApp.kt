@@ -33,6 +33,10 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.toMutableStateList
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -95,42 +99,27 @@ fun MindCoreApp() {
 
     MaterialTheme(colorScheme = scheme, typography = app.mindcore.ui.theme.LotusTypography) {
         var tab by rememberSaveable { mutableIntStateOf(0) }
-        var showSettings by rememberSaveable { mutableStateOf(false) }
-        var showGlass by rememberSaveable { mutableStateOf(false) }
-        var showBlob by rememberSaveable { mutableStateOf(false) }
-        var openItem by rememberSaveable { mutableStateOf<String?>(null) }
         val libraryQuery = remember { LibraryQuery() }
         var showCapture by rememberSaveable { mutableStateOf(false) }
-        var showCalendar by rememberSaveable { mutableStateOf(false) }
-        var showGraph by rememberSaveable { mutableStateOf(false) }
-        var graphFocus by rememberSaveable { mutableStateOf<String?>(null) }
-        // Note editor: a note id, or "new:note" / "new:idea".
-        var editNote by rememberSaveable { mutableStateOf<String?>(null) }
-        var openBoard by rememberSaveable { mutableStateOf<String?>(null) }
-        var showReview by rememberSaveable { mutableStateOf(false) }
+        // Screens above the tabs, as a back stack of routes: "settings", "glass", "blob", "calendar", "review",
+        // "graph" / "graph:<focus id>", "item:<id>", "note:<id>" / "note:new:<kind>", "board:<id>".
+        val stack = rememberSaveable(saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() })) {
+            mutableStateListOf<String>()
+        }
+        fun push(route: String) { if (stack.lastOrNull() != route) stack += route }
+        fun pop() { stack.removeLastOrNull() }
         // "note:<id>" opens a note (dated to-dos in Coming up, the calendar and widgets); anything else is an item.
-        fun openAny(id: String) { if (id.startsWith("note:")) editNote = id.removePrefix("note:") else openItem = id }
+        fun openAny(id: String) = push(if (id.startsWith("note:")) id else "item:$id")
+        val top = stack.lastOrNull()
         val notes = remember(library) { NotesState() }
-        LaunchedEffect(tab, editNote, openBoard, library) { if ((tab == 0 || tab == 2) && editNote == null && openBoard == null) notes.refresh(library.api) }
+        LaunchedEffect(tab, top, library) { if ((tab == 0 || tab == 2) && top == null) notes.refresh(library.api) }
         val askState = remember { AskState() }
         // A widget tap can ask to open an item.
         val requested by app.mindcore.Nav.openItem.collectAsState()
         LaunchedEffect(requested) { requested?.let { openAny(it); app.mindcore.Nav.openItem.value = null } }
         val backdrop = rememberLayerBackdrop()
         val haptics = LocalHapticFeedback.current
-        BackHandler(enabled = showSettings || showGlass || showBlob || showCalendar || showGraph || openItem != null || editNote != null || openBoard != null || showReview) {
-            when {
-                openItem != null -> openItem = null
-                editNote != null -> editNote = null
-                openBoard != null -> openBoard = null
-                showReview -> showReview = false
-                showBlob -> showBlob = false
-                showCalendar -> showCalendar = false
-                showGraph -> { showGraph = false; graphFocus = null }
-                showGlass -> showGlass = false
-                else -> showSettings = false
-            }
-        }
+        BackHandler(enabled = top != null) { pop() }
 
         CompositionLocalProvider(LocalContentColor provides scheme.onSurface) {
             Box(Modifier.fillMaxSize().background(scheme.surface)) {
@@ -138,63 +127,70 @@ fun MindCoreApp() {
                 Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) {
                     Glow(scheme)
                     val api = library.api
-                    val itemId = openItem
-                    when {
-                        showGlass -> GlassSettingsScreen(
-                            style = settings.glass, dark = dark,
-                            onChange = { g -> update { it.copy(glass = g) } },
-                            onBack = { showGlass = false },
-                        )
-                        showBlob -> app.mindcore.ui.blob.BlobGallery { showBlob = false }
-                        showSettings -> SettingsScreen(settings, update, updates, onOpenGlass = { showGlass = true }, onOpenBlob = { showBlob = true }) { showSettings = false }
-                        itemId != null && api != null -> ItemScreen(
-                            id = itemId, api = api,
-                            onBack = { openItem = null },
-                            onOpenItem = { id -> openItem = id },
-                            onChanged = library::replace,
-                            onShowInGraph = { id -> graphFocus = id; showGraph = true; openItem = null },
-                        )
-                        editNote != null && api != null -> NoteEditor(
-                            api = api,
-                            id = editNote?.takeUnless { it.startsWith("new:") },
-                            newKind = editNote?.removePrefix("new:") ?: "note",
-                            linkNames = notes.notes.filter { it.title.isNotBlank() }.map { it.title to it.kind } +
-                                library.items.map { it.name to it.kind },
-                            onBack = { editNote = null },
-                            onOpenItem = { id -> openItem = id },
-                            onOpenNote = { id -> editNote = id },
-                        )
-                        showReview && api != null -> ReviewScreen(api, onBack = { showReview = false },
-                            onOpenSource = { type, id -> if (type == "note") editNote = id else openItem = id })
-                        openBoard != null && api != null -> BoardScreen(
-                            api = api, boardId = openBoard!!,
-                            picks = notes.notes.map { BoardPick("note", it.id, it.title.ifBlank { "Untitled ${it.kind}" }, it.kind) } +
-                                library.items.map { BoardPick("item", it.id, it.name, it.kind) },
-                            onBack = { openBoard = null },
-                            onOpenItem = { id -> openItem = id },
-                            onOpenNote = { id -> editNote = id },
-                        )
-                        showGraph && api != null -> GraphScreen(api, onBack = { showGraph = false; graphFocus = null }, onOpen = { id -> openItem = id }, focus = graphFocus, onOpenNote = { id -> editNote = id })
-                        showCalendar && api != null -> CalendarScreen(api, onBack = { showCalendar = false }, onOpen = { id -> openAny(id) })
-                        tab == 0 -> ForYouScreen(
-                            library,
-                            updates,
-                            onSettings = { showSettings = true },
-                            onOpen = { id -> openAny(id) },
-                            onOpenKind = { k -> libraryQuery.clear(); libraryQuery.kinds = setOfNotNull(k); tab = 1 },
-                            onCalendar = { showCalendar = true },
-                            onGraph = { showGraph = true },
-                            notes = notes,
-                            onOpenNote = { id -> editNote = id },
-                            onSeeNotes = { f -> notes.filter = f; tab = 2 },
-                            onReview = { showReview = true },
-                        )
-                        tab == 1 -> LibraryScreen(library, libraryQuery, onOpen = { id -> openItem = id })
-                        tab == 2 -> NotesScreen(api, notes, onOpen = { id -> editNote = id }, onNew = { k -> editNote = "new:$k" }, onOpenBoard = { id -> openBoard = id })
-                        else -> AskScreen(askState, library.api, settings.research, onOpenItem = { id -> openItem = id }, onOpenNote = { id -> editNote = id })
+                    val arg = top?.substringAfter(':', "")
+                    key(top) {
+                        when {
+                            top == "glass" -> GlassSettingsScreen(
+                                style = settings.glass, dark = dark,
+                                onChange = { g -> update { it.copy(glass = g) } },
+                                onBack = ::pop,
+                            )
+                            top == "blob" -> app.mindcore.ui.blob.BlobGallery { pop() }
+                            top == "settings" -> SettingsScreen(settings, update, updates, onOpenGlass = { push("glass") }, onOpenBlob = { push("blob") }) { pop() }
+                            api == null && top != null -> LaunchedEffect(Unit) { stack.clear() }
+                            top?.startsWith("item:") == true -> ItemScreen(
+                                id = arg!!, api = api!!,
+                                onBack = ::pop,
+                                onOpenItem = { id -> push("item:$id") },
+                                onChanged = library::replace,
+                                onShowInGraph = { id -> push("graph:$id") },
+                                onOpenNote = { id -> push("note:$id") },
+                            )
+                            top?.startsWith("note:") == true -> NoteEditor(
+                                api = api!!,
+                                id = arg!!.takeUnless { it.startsWith("new:") },
+                                newKind = arg.removePrefix("new:"),
+                                linkNames = notes.notes.filter { it.title.isNotBlank() }.map { it.title to it.kind } +
+                                    library.items.map { it.name to it.kind },
+                                onBack = ::pop,
+                                onOpenItem = { id -> push("item:$id") },
+                                onOpenNote = { id -> push("note:$id") },
+                            )
+                            top == "review" -> ReviewScreen(api!!, onBack = ::pop,
+                                onOpenSource = { type, id -> push(if (type == "note") "note:$id" else "item:$id") })
+                            top?.startsWith("board:") == true -> BoardScreen(
+                                api = api!!, boardId = arg!!,
+                                picks = notes.notes.map { BoardPick("note", it.id, it.title.ifBlank { "Untitled ${it.kind}" }, it.kind) } +
+                                    library.items.map { BoardPick("item", it.id, it.name, it.kind) },
+                                onBack = ::pop,
+                                onOpenItem = { id -> push("item:$id") },
+                                onOpenNote = { id -> push("note:$id") },
+                            )
+                            top?.startsWith("graph") == true -> GraphScreen(api!!, onBack = ::pop, onOpen = { id -> push("item:$id") },
+                                focus = arg?.ifBlank { null }, onOpenNote = { id -> push("note:$id") })
+                            top == "calendar" -> CalendarScreen(api!!, onBack = ::pop, onOpen = { id -> openAny(id) })
+                            tab == 0 -> ForYouScreen(
+                                library,
+                                updates,
+                                onSettings = { push("settings") },
+                                onOpen = { id -> openAny(id) },
+                                onOpenKind = { k -> libraryQuery.clear(); libraryQuery.kinds = setOfNotNull(k); tab = 1 },
+                                onCalendar = { push("calendar") },
+                                onGraph = { push("graph") },
+                                notes = notes,
+                                onOpenNote = { id -> push("note:$id") },
+                                onSeeNotes = { f -> notes.filter = f; tab = 2 },
+                                onReview = { push("review") },
+                            )
+                            tab == 1 -> LibraryScreen(library, libraryQuery, onOpen = { id -> push("item:$id") })
+                            tab == 2 -> NotesScreen(api, notes, onOpen = { id -> push("note:$id") }, onNew = { k -> push("note:new:$k") },
+                                onOpenBoard = { id -> push("board:$id") })
+                            else -> AskScreen(askState, library.api, settings.research, onOpenItem = { id -> push("item:$id") },
+                                onOpenNote = { id -> push("note:$id") })
+                        }
                     }
                 }
-                if (!showSettings && !showGlass && !showBlob && !showCalendar && !showGraph && openItem == null && editNote == null && openBoard == null && !showReview) {
+                if (top == null) {
                     // Pass a lambda that reads the state (not the Int), so the glass puck sees every change.
                     BottomBar(
                         selected = { tab },

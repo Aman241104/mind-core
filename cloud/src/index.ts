@@ -290,10 +290,18 @@ async function getItem(id: string, env: Env): Promise<Response> {
   const voices = await env.DB.prepare(
     "SELECT url, transcript, created_at FROM voice_notes WHERE item_id = ? ORDER BY created_at DESC",
   ).bind(id).all();
+  // One row per related item (it can be linked both ways and by more than one reason); saved-together first.
   const related = await env.DB.prepare(
-    `SELECT r.type, i.id, i.name, i.kind, i.trust FROM relations r JOIN items i ON i.id = r.b WHERE r.a = ?
-     UNION SELECT r.type, i.id, i.name, i.kind, i.trust FROM relations r JOIN items i ON i.id = r.a WHERE r.b = ?`,
-  ).bind(id, id).all();
+    `SELECT min(type) AS type, id, name, kind, trust FROM (
+       SELECT r.type, i.id, i.name, i.kind, i.trust FROM relations r JOIN items i ON i.id = r.b WHERE r.a = ?1 AND r.type != 'checked'
+       UNION SELECT r.type, i.id, i.name, i.kind, i.trust FROM relations r JOIN items i ON i.id = r.a WHERE r.b = ?1 AND r.type != 'checked')
+     WHERE id != ?1 GROUP BY id ORDER BY type LIMIT 12`,
+  ).bind(id).all();
+  // Your notes that link here ([[name]] or found related by meaning).
+  const notes = await env.DB.prepare(
+    `SELECT n.id, n.title, n.kind, min(l.type) AS type FROM note_links l JOIN notes n ON n.id = l.src_id
+     WHERE l.dst_id = ? AND l.dst_type = 'item' AND n.deleted_at IS NULL GROUP BY n.id ORDER BY type, n.updated_at DESC LIMIT 12`,
+  ).bind(id).all();
   return json({
     ...parseItem(item),
     // Saves with no web link (notes, voice, screenshots) report url=null so the app doesn't try to open them.
@@ -302,6 +310,7 @@ async function getItem(id: string, env: Env): Promise<Response> {
     })),
     related: related.results,
     voice_notes: voices.results,
+    notes: notes.results,
   });
 }
 

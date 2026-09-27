@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -68,7 +69,7 @@ import java.time.format.DateTimeFormatter
 private val statuses = listOf("new" to "New", "want" to "Want", "trying" to "Trying", "done" to "Done", "skip" to "Skip")
 
 @Composable
-fun ItemScreen(id: String, api: Api, onBack: () -> Unit, onOpenItem: (String) -> Unit, onChanged: (ApiItem) -> Unit, onShowInGraph: (String) -> Unit = {}) {
+fun ItemScreen(id: String, api: Api, onBack: () -> Unit, onOpenItem: (String) -> Unit, onChanged: (ApiItem) -> Unit, onShowInGraph: (String) -> Unit = {}, onOpenNote: (String) -> Unit = {}) {
     var detail by remember(id) { mutableStateOf<ItemDetail?>(null) }
     var error by remember(id) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -204,6 +205,21 @@ fun ItemScreen(id: String, api: Api, onBack: () -> Unit, onOpenItem: (String) ->
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         s.claims.forEach { c -> Text("• $c", style = MaterialTheme.typography.bodySmall) }
                     }
+                }
+            }
+        }
+        if (d.notes.isNotEmpty()) {
+            item { SectionTitle("In your notes") }
+            items(d.notes, key = { "n" + it.id }) { n ->
+                val p = pastelFor(0.takeIf { n.kind != "idea" } ?: 2)
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(p.bg()).clickable { onOpenNote(n.id) }.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(if (n.kind == "idea") "Idea" else "Note", style = MaterialTheme.typography.labelMedium, color = p.ink().copy(alpha = 0.7f))
+                    Spacer(Modifier.width(10.dp))
+                    Text(n.title.ifBlank { "Untitled" }, style = MaterialTheme.typography.bodyLarge, color = p.ink(), modifier = Modifier.weight(1f))
+                    if (n.type == "related") Text("similar", style = MaterialTheme.typography.labelSmall, color = p.ink().copy(alpha = 0.6f))
                 }
             }
         }

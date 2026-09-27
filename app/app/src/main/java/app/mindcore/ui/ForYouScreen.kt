@@ -442,7 +442,7 @@ private fun Jot(library: Library, notes: NotesState, onOpenNote: (String) -> Uni
         if (t.isEmpty() || busy) return
         busy = true
         scope.launch {
-            runCatching { api.createNote(org.json.JSONObject().put("kind", "idea").put("title", t.take(120)).put("body", if (t.length > 120) t else "")) }
+            runCatching { api.createNote(org.json.JSONObject().put("kind", "idea").put("color", 2).put("title", t.take(120)).put("body", if (t.length > 120) t else "")) }
                 .onSuccess { savedId = it.summary.id; text = ""; notes.refresh(api) }
             busy = false
         }

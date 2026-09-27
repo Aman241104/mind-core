@@ -74,7 +74,10 @@ data class Source(val voiceUrl: String? = null, val url: String?, val creator: S
 
 data class Related(val id: String, val name: String, val kind: String, val trust: String)
 
-data class ItemDetail(val item: ApiItem, val sources: List<Source>, val related: List<Related>, val voiceNotes: List<VoiceNote> = emptyList())
+data class ItemDetail(
+    val item: ApiItem, val sources: List<Source>, val related: List<Related>, val voiceNotes: List<VoiceNote> = emptyList(),
+    val notes: List<NoteLink> = emptyList(), // your notes that link here
+)
 
 data class Status(
     val laptopOnline: Boolean,
@@ -414,6 +417,9 @@ class Api(private val baseUrl: String, private val token: String) {
                     claims = (0 until claims.length()).map { claims.getString(it) },
                     promo = s.optInt("promo", 0) == 1,
                 )
+            },
+            notes = (o.optJSONArray("notes") ?: JSONArray()).let { a ->
+                (0 until a.length()).map { a.getJSONObject(it) }.map { NoteLink(it.getString("id"), it.optString("title"), it.optString("kind"), it.optString("type"), false) }
             },
             voiceNotes = (o.optJSONArray("voice_notes") ?: JSONArray()).let { a ->
                 (0 until a.length()).map { a.getJSONObject(it) }.map { VoiceNote(it.getString("url"), it.getString("transcript"), it.getString("created_at")) }
