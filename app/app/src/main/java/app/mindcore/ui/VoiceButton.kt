@@ -135,6 +135,9 @@ fun VoiceButton(label: String, onRecorded: (File?) -> Unit, modifier: Modifier =
             modifier = Modifier.clip(CircleShape).clickable { recorder.discard(); kept = 0; onRecorded(null) }.padding(8.dp),
         )
     }
+    // Listen back before saving.
+    val keptFile = recorder.file
+    if (kept > 0 && !recording && keptFile != null) VoicePlayer(keptFile.absolutePath, Modifier.padding(top = 6.dp))
     // While recording, Swan listens: it perks up and sound rings follow your voice.
     if (recording) Box(Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.Center) {
         LotusBlob(BlobState.Listening, size = 96.dp, level = { level }, onTap = null)

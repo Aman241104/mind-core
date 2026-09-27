@@ -4,6 +4,7 @@ import { chatLinks } from "./whatsapp.ts";
 import { downloadApk, latestRelease, publishRelease } from "./updates.ts";
 import { addItemVoice, isOwnAudio, transcribe } from "./voice.ts";
 import { backfillDeadlines, calendar, putDeadline, researchDeadline, upcoming } from "./deadlines.ts";
+import { createNote, deleteNote, getNote, listNotes, noteFromVoice, updateNote } from "./notes.ts";
 import { ask, claimResearch, createResearch, finishResearch, getResearch, indexSaves, reindex } from "./ask.ts";
 
 export interface Env {
@@ -33,7 +34,7 @@ function authorized(req: Request, env: Env, who: "phone" | "brain"): boolean {
 }
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
     const path = url.pathname;
     try {
@@ -63,6 +64,13 @@ export default {
       const itemMatch = path.match(/^\/v1\/items\/([0-9a-f]{16})$/);
       if (itemMatch && req.method === "GET") return await getItem(itemMatch[1], env);
       if (itemMatch && req.method === "PATCH") return await patchItem(itemMatch[1], req, env);
+      if (path === "/v1/notes" && req.method === "GET") return await listNotes(url, env);
+      if (path === "/v1/notes" && req.method === "POST") return await createNote(req, env, ctx);
+      if (path === "/v1/notes/voice" && req.method === "POST") return await noteFromVoice(req, env, ctx);
+      const note = path.match(/^\/v1\/notes\/([0-9a-f]{16})$/);
+      if (note && req.method === "GET") return await getNote(note[1], env);
+      if (note && req.method === "PATCH") return await updateNote(note[1], req, env, ctx);
+      if (note && req.method === "DELETE") return await deleteNote(note[1], url, env);
       if (path === "/v1/calendar" && req.method === "GET") return await calendar(url, env);
       if (path === "/v1/upcoming" && req.method === "GET") return await upcoming(env);
       const dl = path.match(/^\/v1\/items\/([0-9a-f]{16})\/(deadline|find-deadline)$/);
@@ -251,8 +259,11 @@ async function getItem(id: string, env: Env): Promise<Response> {
   const item = await env.DB.prepare("SELECT * FROM items WHERE id = ?").bind(id).first();
   if (!item) return bad("no such item", 404);
   const sources = await env.DB.prepare(
-    `SELECT s.id, s.url, s.creator, s.caption, s.saved_at, s.promo, x.claims, x.needs_frames
+    `SELECT s.id, s.url, s.kind_hint, s.voice_url, s.creator, s.caption, s.saved_at, s.promo, x.claims, x.needs_frames
      FROM item_sources x JOIN saves s ON s.id = x.save_id WHERE x.item_id = ? ORDER BY s.saved_at DESC`,
+  ).bind(id).all();
+  const voices = await env.DB.prepare(
+    "SELECT url, transcript, created_at FROM voice_notes WHERE item_id = ? ORDER BY created_at DESC",
   ).bind(id).all();
   const related = await env.DB.prepare(
     `SELECT r.type, i.id, i.name, i.kind, i.trust FROM relations r JOIN items i ON i.id = r.b WHERE r.a = ?
@@ -260,8 +271,12 @@ async function getItem(id: string, env: Env): Promise<Response> {
   ).bind(id, id).all();
   return json({
     ...parseItem(item),
-    sources: sources.results.map((s) => ({ ...s, claims: s.claims ? JSON.parse(String(s.claims)) : [] })),
+    // Saves with no web link (notes, voice, screenshots) report url=null so the app doesn't try to open them.
+    sources: sources.results.map((s) => ({
+      ...s, url: ["text", "pdf"].includes(String(s.kind_hint)) ? null : s.url, claims: s.claims ? JSON.parse(String(s.claims)) : [],
+    })),
     related: related.results,
+    voice_notes: voices.results,
   });
 }
 

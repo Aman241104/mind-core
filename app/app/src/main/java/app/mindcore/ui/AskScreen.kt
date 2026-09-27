@@ -183,7 +183,7 @@ fun AskScreen(state: AskState, api: Api?, research: Research, onOpenItem: (Strin
             }
             itemsIndexed(state.messages) { _, m ->
                 if (m.fromUser) UserBubble(m.text) else Reply(m, onOpenItem, onResearch = { researchOnline(it) }, onOpenUrl = { url ->
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    openLink(context, url)
                 })
             }
         }

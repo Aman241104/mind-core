@@ -70,7 +70,7 @@ export async function reindex(env: Env): Promise<Response> {
 interface Turn { role: "user" | "assistant"; content: string }
 interface Candidate { key: string; text: string; source: SourceOut }
 interface SourceOut {
-  n?: number; type: "item" | "save"; item_id?: string; save_id?: string; title: string; url?: string | null;
+  n?: number; type: "item" | "save" | "note"; item_id?: string; save_id?: string; note_id?: string; title: string; url?: string | null;
   kind?: string; trust?: string;
 }
 
@@ -131,7 +131,24 @@ export async function ask(req: Request, env: Env, hybridItems: (q: string, limit
       .bind(...saveIds).all<{ id: string; url: string | null; creator: string | null; kind_hint: string; saved_at: string }>()
     : { results: [] };
   const saveById = new Map(saves.results.map((s) => [s.id, s]));
+  // Your own notes and ideas.
+  const noteIds = [...new Set(chunkHits.matches.map((m) => String(m.metadata?.note_id ?? "")))].filter(Boolean);
+  const notes = noteIds.length
+    ? await env.DB.prepare(`SELECT id, kind, title, updated_at FROM notes WHERE deleted_at IS NULL AND id IN (${noteIds.map(() => "?").join(",")})`)
+      .bind(...noteIds).all<{ id: string; kind: string; title: string; updated_at: string }>()
+    : { results: [] };
+  const noteById = new Map(notes.results.map((n) => [n.id, n]));
   for (const m of chunkHits.matches) {
+    const nid = String(m.metadata?.note_id ?? "");
+    const n = nid ? noteById.get(nid) : undefined;
+    if (n) {
+      candidates.push({
+        key: `c:${m.id}`,
+        text: `From your ${n.kind} "${n.title || "untitled"}" (edited ${n.updated_at.slice(0, 10)}): ${String(m.metadata?.t ?? "")}`,
+        source: { type: "note", note_id: n.id, title: n.title || "Untitled " + n.kind, kind: n.kind },
+      });
+      continue;
+    }
     const s = saveById.get(String(m.metadata?.save_id));
     if (!s) continue;
     const who = s.creator ? ` by ${s.creator}` : "";
@@ -170,7 +187,7 @@ export async function ask(req: Request, env: Env, hybridItems: (q: string, limit
   top = top.slice(0, listMode ? 30 : 8);
   const context = top.map((c, i) => `[${i + 1}] ${c.text}`).join("\n");
 
-  const system = `You are mind-core, the user's assistant for things they saved from reels, posts and screenshots.
+  const system = `You are mind-core, the user's assistant for their own notes and ideas and the things they saved from reels, posts and screenshots.
 Answer ONLY from the numbered sources. Cite every fact like [1] or [2][3], right after the fact.
 If the sources don't answer the question, say "That isn't in your saves." and stop; don't use outside knowledge.
 Sources marked trust: check or unconfirmed contain claims nobody has verified; say so when you use them.

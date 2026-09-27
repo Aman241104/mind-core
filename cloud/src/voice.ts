@@ -33,6 +33,7 @@ export async function addItemVoice(id: string, req: Request, env: Env): Promise<
   await env.DB.prepare(
     `UPDATE items SET user_note = trim(COALESCE(user_note, '') || char(10) || ?), updated_at = datetime('now') WHERE id = ?`,
   ).bind(`Voice note, ${day}: ${text}`, id).run();
+  await env.DB.prepare("INSERT INTO voice_notes (item_id, url, transcript) VALUES (?, ?, ?)").bind(id, body.voice_url, text).run();
   // "…the deadline is 5 October" in a voice note sets the item's deadline.
   const deadline = await findDeadline(env, text).catch(() => null);
   if (deadline) await setDeadline(env, id, deadline, "voice");

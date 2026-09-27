@@ -73,7 +73,7 @@ fun ItemScreen(id: String, api: Api, onBack: () -> Unit, onOpenItem: (String) ->
     LaunchedEffect(id) {
         try { detail = api.item(id) } catch (e: Exception) { error = e.message }
     }
-    fun open(url: String) = context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    fun open(url: String?) = openLink(context, url)
 
     LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars)) }
@@ -123,7 +123,7 @@ fun ItemScreen(id: String, api: Api, onBack: () -> Unit, onOpenItem: (String) ->
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                it.url?.let { url ->
+                webLink(it.url)?.let { url ->
                     Button(onClick = { open(url) }, modifier = Modifier.fillMaxWidth()) {
                         Text(if ("github.com" in url) "Open on GitHub" else "Open link")
                     }
@@ -151,7 +151,14 @@ fun ItemScreen(id: String, api: Api, onBack: () -> Unit, onOpenItem: (String) ->
         item {
             var busy by remember(id) { mutableStateOf<String?>(null) }
             Block("Your notes") {
-                it.userNote?.takeIf { n -> n.isNotBlank() }?.let { n -> Text(n, style = MaterialTheme.typography.bodyMedium) }
+                // Each voice note: its recording (tap to listen again) and what it said.
+                d.voiceNotes.forEach { v ->
+                    VoicePlayer(v.url)
+                    Text(v.transcript, style = MaterialTheme.typography.bodyMedium)
+                }
+                // Typed notes (voice-note lines are already shown above with their players).
+                it.userNote?.lines()?.filterNot { l -> d.voiceNotes.isNotEmpty() && l.startsWith("Voice note, ") }
+                    ?.joinToString("\n")?.takeIf { n -> n.isNotBlank() }?.let { n -> Text(n, style = MaterialTheme.typography.bodyMedium) }
                     ?: Text("Nothing yet. Add a voice note: why you saved it, when to try it, any deadline.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (busy != null) Text(busy!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
@@ -176,16 +183,19 @@ fun ItemScreen(id: String, api: Api, onBack: () -> Unit, onOpenItem: (String) ->
                 shape = RoundedCornerShape(24.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 contentColor = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).clickable { open(s.url) },
+                // Only saves that came from a link are clickable (notes and voice saves have none).
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
+                    .then(if (webLink(s.url) != null) Modifier.clickable { open(s.url) } else Modifier),
             ) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(s.creator ?: s.url.substringAfter("//").substringBefore("/"),
+                        Text(s.creator ?: s.url?.substringAfter("//")?.substringBefore("/") ?: "Your note",
                             style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                         if (s.promo) Pill("Promo", MaterialTheme.colorScheme.outline)
                     }
                     Text("Saved ${s.savedAt.take(10)}", style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline)
+                    s.voiceUrl?.let { v -> VoicePlayer(v) }
                     if (s.claims.isNotEmpty()) {
                         Text("What the post claimed (not fact-checked yet):", style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
