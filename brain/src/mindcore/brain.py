@@ -73,7 +73,7 @@ def process_batch(api: Api, jobs: list[dict], log=print) -> None:
 
     sources = [
         Source(str(job_id), c.caption, c.transcript, c.creator, c.screen_text,
-               shelf_hint=job["save"]["shelf"], note=job["save"].get("note") or "")
+               shelf_hint=job["save"]["shelf"], note=job["save"].get("note") or "", saved=job["save"].get("saved_at") or "")
         for job_id, (job, c) in fetched.items()
     ]
     try:
@@ -105,8 +105,9 @@ def answer_research(api: Api, q: dict, log=print) -> None:
     log(f"research #{q['id']}: {q['question'][:80]}")
     try:
         t0 = time.monotonic()
-        r = research_with_claude(q["question"])
-        api.post(f"/v1/brain/research/{q['id']}", {"answer": r.get("answer", ""), "sources": r.get("sources", [])})
+        r = research_with_claude(q["question"], want_deadline=q.get("kind") == "deadline")
+        api.post(f"/v1/brain/research/{q['id']}",
+                 {"answer": r.get("answer", ""), "sources": r.get("sources", []), "deadline": r.get("deadline")})
         log(f"  ✓ answered in {time.monotonic() - t0:.0f}s with {len(r.get('sources', []))} sources")
     except Exception as e:
         api.post(f"/v1/brain/research/{q['id']}", {"error": str(e)[:500]})

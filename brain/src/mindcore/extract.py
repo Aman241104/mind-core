@@ -27,12 +27,15 @@ Rules:
 - one_line: what it is, in plain words, max 15 words.
 - screen text comes from OCR and is noisy; use it to find names/URLs the speaker didn't say.
 - promo: true if the video is clearly an ad / "comment to get the link" bait.
+- deadline: YYYY-MM-DD if the source or the owner's note/voice note gives a date to act by (last date to apply,
+  register, submit, an offer ending, "remind me on ..."), else null. Resolve dates without a year to the first such
+  date on or after the source's saved date. A deadline that has already passed is still a deadline.
 - shelf: "learning" if it's something to learn/try/apply to, "work" if it's the owner's own client/business
   material (client websites, suppliers, competitor research for a client). Sources marked shelf_hint=learning
   are almost always learning; decide carefully for shelf_hint=unsure. Work sources get no items.
 
 Return ONLY JSON: {"<source id>": {"shelf": "learning"|"work", "items": [{"kind","name","url","one_line",
-"claims":[...], "needs_frames": bool}], "promo": bool, "language": "<lang>"}}
+"claims":[...], "needs_frames": bool, "deadline": "YYYY-MM-DD"|null}], "promo": bool, "language": "<lang>"}}
 
 Sources:
 """
@@ -47,11 +50,12 @@ class Source:
     screen_text: str = ""
     shelf_hint: str = "learning"
     note: str = ""
+    saved: str = ""
 
 
 def build_prompt(sources: list[Source]) -> str:
     parts = [
-        f"### {s.id}\nshelf_hint: {s.shelf_hint}\ncreator: {s.creator or '?'}\nyour note: {s.note[:300]}\n"
+        f"### {s.id}\nsaved: {s.saved[:10]}\nshelf_hint: {s.shelf_hint}\ncreator: {s.creator or '?'}\nyour note: {s.note[:600]}\n"
         f"caption: {s.caption[:1500]}\ntranscript: {s.transcript[:6000]}\nscreen text: {s.screen_text[:4000]}"
         for s in sources
     ]
@@ -97,14 +101,20 @@ Return ONLY JSON: {"answer": "<markdown, cite sources inline as [1], [2]>", "sou
 Question: """
 
 
-def research_with_claude(question: str, model: str = "sonnet", timeout: int = 900) -> dict:
+DEADLINE_SUFFIX = """
+Also include "deadline": "YYYY-MM-DD" (the date to act by, from an official source if possible) or null if there
+is none or it can't be confirmed. Say in the answer how sure you are."""
+
+
+def research_with_claude(question: str, model: str = "sonnet", timeout: int = 900, want_deadline: bool = False) -> dict:
     """Web research on your Claude plan: same lean call as extraction, but with web search allowed."""
     flags = list(LEAN_FLAGS)
     flags[flags.index("--tools") + 1] = "WebSearch,WebFetch"
     flags[flags.index("--system-prompt") + 1] = "You are a careful research assistant. Reply with JSON only."
     result = subprocess.run(
         ["claude", "-p", "--model", model, "--output-format", "json", "--allowedTools", "WebSearch,WebFetch", *flags],
-        input=RESEARCH_PROMPT + question, capture_output=True, text=True, timeout=timeout, cwd="/tmp",
+        input=RESEARCH_PROMPT + question + (DEADLINE_SUFFIX if want_deadline else ""),
+        capture_output=True, text=True, timeout=timeout, cwd="/tmp",
     )
     try:
         envelope = json.loads(result.stdout)

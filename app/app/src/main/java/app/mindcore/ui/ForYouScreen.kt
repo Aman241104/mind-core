@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -70,6 +71,7 @@ fun ForYouScreen(
     onSettings: () -> Unit,
     onOpen: (String) -> Unit,
     onOpenKind: (String?) -> Unit,
+    onCalendar: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val items = library.items
@@ -85,7 +87,7 @@ fun ForYouScreen(
     PullToRefreshBox(isRefreshing = library.loading, onRefresh = { scope.launch { library.refresh() } }) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 140.dp)) {
             item { Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars)) }
-            item { Header(onSettings) }
+            item { Header(onSettings, onCalendar) }
             item { UpdateBanner(updates, Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) }
             item { Processing(library) }
             if (!library.paired) item {
@@ -94,6 +96,29 @@ fun ForYouScreen(
                 }
             }
             library.error?.let { message -> item { Box(Modifier.padding(16.dp)) { MessageCard("Couldn't reach the server", message) } } }
+
+            if (library.upcoming.isNotEmpty()) {
+                item { SectionHeader("Coming up", "Calendar", onCalendar) }
+                items(library.upcoming.take(5), key = { "due-" + it.id }) { u ->
+                    val label = dueLabel(LocalDate.parse(u.deadline), LocalDate.now())
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onOpen(u.id) }.padding(horizontal = 20.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.width(56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(LocalDate.parse(u.deadline).dayOfMonth.toString(), style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            Text(LocalDate.parse(u.deadline).format(DateTimeFormatter.ofPattern("MMM")),
+                                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Column(Modifier.weight(1f).padding(start = 8.dp)) {
+                            Text(u.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${kindLabels[u.kind] ?: u.kind} · $label", style = MaterialTheme.typography.bodySmall,
+                                color = if (label.endsWith("ago")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
 
             top?.let { item { TopFind(it) { onOpen(it.id) } } }
 
@@ -139,7 +164,7 @@ fun ForYouScreen(
 }
 
 @Composable
-private fun Header(onSettings: () -> Unit) {
+private fun Header(onSettings: () -> Unit, onCalendar: () -> Unit) {
     Row(Modifier.padding(start = 20.dp, end = 16.dp, top = 20.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
@@ -148,6 +173,12 @@ private fun Header(onSettings: () -> Unit) {
             )
             Text("For You", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
         }
+        Icon(
+            Icons.Rounded.DateRange, contentDescription = "Calendar",
+            modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .clickable(onClick = onCalendar).padding(12.dp).size(24.dp),
+        )
+        Spacer(Modifier.width(8.dp))
         Icon(
             Icons.Rounded.Settings, contentDescription = "Settings",
             modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh)

@@ -1,5 +1,6 @@
 // Voice notes: recorded on the phone, stored on your Cloudinary, transcribed here by Whisper (free tier).
 import type { Env } from "./index.ts";
+import { findDeadline, setDeadline } from "./deadlines.ts";
 
 const WHISPER = "@cf/openai/whisper-large-v3-turbo"; // tested: m4a ok, ~2 s for 12 s of audio, auto language
 const MAX_AUDIO_BYTES = 4 * 1024 * 1024; // ~15 min at the phone's 32 kbps; far more than a note needs
@@ -32,5 +33,8 @@ export async function addItemVoice(id: string, req: Request, env: Env): Promise<
   await env.DB.prepare(
     `UPDATE items SET user_note = trim(COALESCE(user_note, '') || char(10) || ?), updated_at = datetime('now') WHERE id = ?`,
   ).bind(`🎙 ${day}: ${text}`, id).run();
-  return Response.json({ ok: true, transcript: text });
+  // "…the deadline is 5 October" in a voice note sets the item's deadline.
+  const deadline = await findDeadline(env, text).catch(() => null);
+  if (deadline) await setDeadline(env, id, deadline, "voice");
+  return Response.json({ ok: true, transcript: text, deadline });
 }

@@ -52,6 +52,15 @@ import app.mindcore.data.Capturer
 import app.mindcore.data.ApiItem
 import app.mindcore.data.ItemDetail
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 private val statuses = listOf("new" to "New", "want" to "Want", "trying" to "Trying", "done" to "Done", "skip" to "Skip")
 
@@ -154,6 +163,7 @@ fun ItemScreen(id: String, api: Api, onBack: () -> Unit, onOpenItem: (String) ->
                 })
             }
         }
+        item { DeadlineBlock(it, api) { scope.launch { detail = api.item(id); onChanged(detail!!.item) } } }
         item { SectionTitle("Where you saved it") }
         items(d.sources) { s ->
             Surface(
@@ -192,6 +202,65 @@ fun ItemScreen(id: String, api: Api, onBack: () -> Unit, onOpenItem: (String) ->
             }
         }
         item { Spacer(Modifier.height(24.dp).windowInsetsBottomHeight(WindowInsets.navigationBars)) }
+    }
+}
+
+private val deadlineFrom = mapOf(
+    "post" to "from the post", "note" to "from your note", "voice" to "from your voice note",
+    "research" to "found online", "you" to "set by you",
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DeadlineBlock(item: ApiItem, api: Api, onChanged: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var picking by remember { mutableStateOf(false) }
+    var status by remember(item.id) { mutableStateOf<String?>(null) }
+    Block("Deadline") {
+        val d = item.deadline
+        if (d != null) {
+            val date = LocalDate.parse(d)
+            Text(date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy")), style = MaterialTheme.typography.titleMedium)
+            Text("${dueLabel(date, LocalDate.now())} · ${deadlineFrom[item.deadlineSource] ?: ""}", style = MaterialTheme.typography.bodySmall,
+                color = if (date.isBefore(LocalDate.now())) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            Text("No deadline. Say one in a voice note, pick a date, or look it up.", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        status?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { picking = true }) { Text(if (d == null) "Pick date" else "Change") }
+            if (d != null) OutlinedButton(onClick = { scope.launch { api.setDeadline(item.id, null); onChanged() } }) { Text("Clear") }
+            if (item.kind in setOf("job", "course", "cert", "other") && status == null) OutlinedButton(onClick = {
+                status = "Looking it up on your laptop…"
+                scope.launch {
+                    status = try {
+                        val rid = api.findDeadline(item.id)
+                        var r = api.research(rid)
+                        while (r.status == "pending" || r.status == "leased") { delay(4000); r = api.research(rid) }
+                        onChanged()
+                        if (r.status == "done") r.answer?.lineSequence()?.firstOrNull { it.isNotBlank() }?.take(200) else "Couldn't find it: ${r.error}"
+                    } catch (e: Exception) { e.message }
+                }
+            }) { Text("Find online") }
+        }
+    }
+    if (picking) {
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = item.deadline?.let { LocalDate.parse(it).toEpochDay() * 86_400_000L },
+        )
+        DatePickerDialog(
+            onDismissRequest = { picking = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    picking = false
+                    state.selectedDateMillis?.let { ms ->
+                        scope.launch { api.setDeadline(item.id, LocalDate.ofEpochDay(ms / 86_400_000L).toString()); onChanged() }
+                    }
+                }) { Text("Set deadline") }
+            },
+            dismissButton = { TextButton(onClick = { picking = false }) { Text("Cancel") } },
+        ) { DatePicker(state) }
     }
 }
 

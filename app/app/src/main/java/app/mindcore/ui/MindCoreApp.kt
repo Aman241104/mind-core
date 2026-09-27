@@ -94,12 +94,14 @@ fun MindCoreApp() {
         var openItem by rememberSaveable { mutableStateOf<String?>(null) }
         var libraryKind by rememberSaveable { mutableStateOf<String?>(null) }
         var showCapture by rememberSaveable { mutableStateOf(false) }
+        var showCalendar by rememberSaveable { mutableStateOf(false) }
         val askState = remember { AskState() }
         val backdrop = rememberLayerBackdrop()
         val haptics = LocalHapticFeedback.current
-        BackHandler(enabled = showSettings || showGlass || openItem != null) {
+        BackHandler(enabled = showSettings || showGlass || showCalendar || openItem != null) {
             when {
                 openItem != null -> openItem = null
+                showCalendar -> showCalendar = false
                 showGlass -> showGlass = false
                 else -> showSettings = false
             }
@@ -125,18 +127,20 @@ fun MindCoreApp() {
                             onOpenItem = { id -> openItem = id },
                             onChanged = library::replace,
                         )
+                        showCalendar && api != null -> CalendarScreen(api, onBack = { showCalendar = false }, onOpen = { id -> openItem = id })
                         tab == 0 -> ForYouScreen(
                             library,
                             updates,
                             onSettings = { showSettings = true },
                             onOpen = { id -> openItem = id },
                             onOpenKind = { k -> libraryKind = k; tab = 1 },
+                            onCalendar = { showCalendar = true },
                         )
                         tab == 1 -> LibraryScreen(library, libraryKind, { k -> libraryKind = k }, onOpen = { id -> openItem = id })
                         else -> AskScreen(askState, library.api, settings.research, onOpenItem = { id -> openItem = id })
                     }
                 }
-                if (!showSettings && !showGlass && openItem == null) {
+                if (!showSettings && !showGlass && !showCalendar && openItem == null) {
                     // Pass a lambda that reads the state (not the Int), so the glass puck sees every change.
                     BottomBar(
                         selected = { tab },

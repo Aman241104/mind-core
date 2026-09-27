@@ -3,6 +3,7 @@ import { kindHint, normalizeUrl, shortHash, triage } from "./links.ts";
 import { chatLinks } from "./whatsapp.ts";
 import { downloadApk, latestRelease, publishRelease } from "./updates.ts";
 import { addItemVoice, isOwnAudio, transcribe } from "./voice.ts";
+import { backfillDeadlines, calendar, putDeadline, researchDeadline, upcoming } from "./deadlines.ts";
 import { ask, claimResearch, createResearch, finishResearch, getResearch, indexSaves, reindex } from "./ask.ts";
 
 export interface Env {
@@ -45,6 +46,7 @@ export default {
         if (path === "/v1/brain/fail" && req.method === "POST") return await fail(req, env);
         if (path === "/v1/brain/reindex" && req.method === "POST") return await reindex(env);
         if (path === "/v1/brain/app" && req.method === "POST") return await publishRelease(req, env);
+        if (path === "/v1/brain/deadlines/backfill" && req.method === "POST") return await backfillDeadlines(env);
         if (path === "/v1/brain/research/claim" && req.method === "POST") return await claimResearch(env);
         const done = path.match(/^\/v1\/brain\/research\/(\d+)$/);
         if (done && req.method === "POST") return await finishResearch(Number(done[1]), req, env);
@@ -61,6 +63,11 @@ export default {
       const itemMatch = path.match(/^\/v1\/items\/([0-9a-f]{16})$/);
       if (itemMatch && req.method === "GET") return await getItem(itemMatch[1], env);
       if (itemMatch && req.method === "PATCH") return await patchItem(itemMatch[1], req, env);
+      if (path === "/v1/calendar" && req.method === "GET") return await calendar(url, env);
+      if (path === "/v1/upcoming" && req.method === "GET") return await upcoming(env);
+      const dl = path.match(/^\/v1\/items\/([0-9a-f]{16})\/(deadline|find-deadline)$/);
+      if (dl && dl[2] === "deadline" && req.method === "PUT") return await putDeadline(dl[1], req, env);
+      if (dl && dl[2] === "find-deadline" && req.method === "POST") return await researchDeadline(dl[1], env);
       const voice = path.match(/^\/v1\/items\/([0-9a-f]{16})\/voice$/);
       if (voice && req.method === "POST") return await addItemVoice(voice[1], req, env);
       if (path === "/v1/search" && req.method === "POST") return await search(req, env);
@@ -301,6 +308,7 @@ async function claim(req: Request, env: Env): Promise<Response> {
 interface ItemIn {
   kind: string; name: string; url?: string | null; one_line?: string; claims?: string[];
   needs_frames?: boolean; canonical_key?: string; trust?: string; verification?: Json;
+  deadline?: string | null; // YYYY-MM-DD, from the post or your note/voice note
 }
 interface CompleteIn {
   job_id: number;
@@ -353,6 +361,9 @@ async function complete(req: Request, env: Env): Promise<Response> {
         `INSERT INTO item_sources (item_id, save_id, claims, needs_frames) VALUES (?, ?, ?, ?)
          ON CONFLICT(item_id, save_id) DO UPDATE SET claims = excluded.claims, needs_frames = excluded.needs_frames`,
       ).bind(id, saveId, claims, it.needs_frames ? 1 : 0),
+      ...(it.deadline && /^\d{4}-\d{2}-\d{2}$/.test(it.deadline)
+        ? [env.DB.prepare(`UPDATE items SET deadline = ?, deadline_source = 'post' WHERE id = ? AND deadline IS NULL`).bind(it.deadline, id)]
+        : []),
       env.DB.prepare("DELETE FROM items_fts WHERE item_id = ?").bind(id),
       env.DB.prepare("INSERT INTO items_fts (item_id, name, one_line, claims) VALUES (?, ?, ?, ?)")
         .bind(id, it.name, it.one_line ?? "", (it.claims ?? []).join(" ")),

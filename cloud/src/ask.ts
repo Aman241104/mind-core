@@ -224,13 +224,17 @@ export async function claimResearch(env: Env): Promise<Response> {
     `UPDATE research SET status = 'leased', lease_until = datetime('now', '+15 minutes'), updated_at = datetime('now')
      WHERE id = (SELECT id FROM research WHERE status = 'pending' OR (status = 'leased' AND lease_until < datetime('now'))
                  ORDER BY id LIMIT 1)
-     RETURNING id, question`,
+     RETURNING id, question, kind, item_id`,
   ).first();
   return json(r ?? null);
 }
 
 export async function finishResearch(id: number, req: Request, env: Env): Promise<Response> {
-  const body = (await req.json()) as { answer?: string; sources?: unknown[]; error?: string };
+  const body = (await req.json()) as { answer?: string; sources?: unknown[]; error?: string; deadline?: string | null };
+  const r = await env.DB.prepare("SELECT kind, item_id FROM research WHERE id = ?").bind(id).first<{ kind: string; item_id: string | null }>();
+  if (r?.kind === "deadline" && r.item_id && body.deadline && /^\d{4}-\d{2}-\d{2}$/.test(body.deadline)) {
+    await env.DB.prepare("UPDATE items SET deadline = ?, deadline_source = 'research' WHERE id = ?").bind(body.deadline, r.item_id).run();
+  }
   await env.DB.prepare(
     `UPDATE research SET status = ?, answer = ?, sources = ?, error = ?, updated_at = datetime('now') WHERE id = ?`,
   ).bind(body.error ? "failed" : "done", body.answer ?? null, JSON.stringify(body.sources ?? []), body.error ?? null, id).run();
