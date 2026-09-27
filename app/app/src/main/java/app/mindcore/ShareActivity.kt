@@ -28,7 +28,9 @@ class ShareActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        val capture = captureFrom(intent)
+        // Opened from the tile, widget or app-icon shortcut: an empty sheet with the text box and pickers.
+        val quick = intent.action == ACTION_CAPTURE
+        val capture = if (quick) Capture() else captureFrom(intent)
         setContent {
             val store = remember { SettingsStore(applicationContext) }
             val settings by store.settings.collectAsState(initial = AppSettings())
@@ -37,10 +39,14 @@ class ShareActivity : ComponentActivity() {
             }
             MaterialTheme(colorScheme = colorSchemeFor(settings)) {
                 ModalBottomSheet(onDismissRequest = { finish() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-                    CaptureContent(initial = capture, capturer = capturer, editable = false, onDone = { finish() })
+                    CaptureContent(initial = capture, capturer = capturer, editable = quick, onDone = { finish() })
                 }
             }
         }
+    }
+
+    companion object {
+        const val ACTION_CAPTURE = "app.mindcore.CAPTURE"
     }
 
     private fun captureFrom(intent: Intent): Capture {

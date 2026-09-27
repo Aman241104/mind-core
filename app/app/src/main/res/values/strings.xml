@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tile_label">Save to mind-core</string>
+    <string name="widget_description">Save a link, note or screenshot in one tap</string>
+    <string name="shortcut_capture">Save something</string>
+</resources>
