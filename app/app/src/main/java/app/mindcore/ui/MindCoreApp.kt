@@ -1,6 +1,20 @@
 package app.mindcore.ui
 
-import android.os.Build
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.foundation.shape.CircleShape
+import app.mindcore.settings.AppSettings
+import app.mindcore.settings.SettingsStore
+import app.mindcore.ui.theme.colorSchemeFor
+import app.mindcore.ui.theme.isDark
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.geometry.Offset
@@ -37,8 +51,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -70,26 +82,46 @@ private val tabs = listOf(
 @Composable
 fun MindCoreApp() {
     val context = LocalContext.current
-    // Material You: colors come from the wallpaper on Android 12+.
-    val scheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) dynamicDarkColorScheme(context) else darkColorScheme()
+    val store = remember { SettingsStore(context.applicationContext) }
+    val settings by store.settings.collectAsState(initial = AppSettings())
+    val scope = rememberCoroutineScope()
+    val update: ((AppSettings) -> AppSettings) -> Unit = { change -> scope.launch { store.update(change) } }
+    val scheme = colorSchemeFor(settings)
+    val dark = isDark(settings)
 
     MaterialTheme(colorScheme = scheme) {
         var tab by rememberSaveable { mutableIntStateOf(0) }
+        var showSettings by rememberSaveable { mutableStateOf(false) }
         val backdrop = rememberLayerBackdrop()
+        val haptics = LocalHapticFeedback.current
+        BackHandler(enabled = showSettings) { showSettings = false }
 
         CompositionLocalProvider(LocalContentColor provides scheme.onSurface) {
-        Box(Modifier.fillMaxSize().background(scheme.surface)) {
-            // Everything in this layer is what the glass bends and blurs.
-            Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) {
-                Glow(scheme)
-                when (tab) {
-                    0 -> ForYou()
-                    else -> Placeholder(tabs[tab].first)
+            Box(Modifier.fillMaxSize().background(scheme.surface)) {
+                // Everything in this layer is what the glass bends and blurs.
+                Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) {
+                    Glow(scheme)
+                    when {
+                        showSettings -> SettingsScreen(settings, update) { showSettings = false }
+                        tab == 0 -> ForYou(onSettings = { showSettings = true })
+                        else -> Placeholder(tabs[tab].first)
+                    }
+                }
+                if (!showSettings) {
+                    // Pass a lambda that reads the state (not the Int), so the glass puck sees every change.
+                    BottomBar(
+                        selected = { tab },
+                        onSelect = {
+                            if (settings.haptics && it != tab) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                            tab = it
+                        },
+                        backdrop = backdrop,
+                        glass = settings.glass,
+                        dark = dark,
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                    )
                 }
             }
-            // Pass a lambda that reads the state (not the Int), so the glass puck sees every change.
-            BottomBar({ tab }, { tab = it }, backdrop, Modifier.align(Alignment.BottomCenter))
-        }
         }
     }
 }
@@ -107,19 +139,30 @@ private fun Glow(scheme: ColorScheme) {
 }
 
 @Composable
-private fun ForYou() {
+private fun ForYou(onSettings: () -> Unit) {
     LazyColumn(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 140.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item { Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars)) }
         item {
-            Column(Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp)) {
-                Text("For You", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-                Text(
-                    "${sampleItems.size} finds from your saved reels",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Row(Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp), verticalAlignment = Alignment.Top) {
+                Column(Modifier.weight(1f)) {
+                    Text("For You", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        "${sampleItems.size} finds from your saved reels",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(
+                    Icons.Rounded.Settings, contentDescription = "Settings",
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        .clickable(onClick = onSettings)
+                        .padding(12.dp)
+                        .size(24.dp),
                 )
             }
         }
@@ -183,8 +226,15 @@ private fun Placeholder(title: String) {
 }
 
 @Composable
-private fun BottomBar(selected: () -> Int, onSelect: (Int) -> Unit, backdrop: Backdrop, modifier: Modifier) {
-    val contentColor = Color.White
+private fun BottomBar(
+    selected: () -> Int,
+    onSelect: (Int) -> Unit,
+    backdrop: Backdrop,
+    glass: Float,
+    dark: Boolean,
+    modifier: Modifier,
+) {
+    val contentColor = if (dark) Color.White else Color.Black
     Row(
         modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -195,6 +245,8 @@ private fun BottomBar(selected: () -> Int, onSelect: (Int) -> Unit, backdrop: Ba
             backdrop = backdrop,
             tabsCount = tabs.size,
             accentColor = MaterialTheme.colorScheme.primary,
+            isLight = !dark,
+            glass = glass,
             modifier = Modifier.weight(1f),
         ) {
             tabs.forEachIndexed { index, (label, icon) ->
@@ -205,13 +257,13 @@ private fun BottomBar(selected: () -> Int, onSelect: (Int) -> Unit, backdrop: Ba
             }
         }
         Spacer(Modifier.width(12.dp))
-        CaptureButton(backdrop)
+        CaptureButton(backdrop, glass, dark, contentColor)
     }
 }
 
 /** Round glass "+" beside the tabs, like Convx's search button. Opens the capture sheet (M2). */
 @Composable
-private fun CaptureButton(backdrop: Backdrop) {
+private fun CaptureButton(backdrop: Backdrop, glass: Float, dark: Boolean, contentColor: Color) {
     Box(
         Modifier
             .size(64.dp)
@@ -220,14 +272,14 @@ private fun CaptureButton(backdrop: Backdrop) {
                 shape = { Capsule() },
                 effects = {
                     vibrancy()
-                    blur(8f.dp.toPx())
-                    lens(16f.dp.toPx(), 32f.dp.toPx())
+                    blur(8f.dp.toPx() * (0.5f + glass / 2f))
+                    if (glass > 0f) lens(16f.dp.toPx() * glass, 32f.dp.toPx() * glass)
                 },
-                onDrawSurface = { drawRect(Color(0xFF121212).copy(alpha = 0.4f)) },
+                onDrawSurface = { drawRect((if (dark) Color(0xFF121212) else Color(0xFFFAFAFA)).copy(alpha = 0.4f)) },
             )
             .clickable { },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Rounded.Add, contentDescription = "Capture", tint = Color.White, modifier = Modifier.size(30.dp))
+        Icon(Icons.Rounded.Add, contentDescription = "Capture", tint = contentColor, modifier = Modifier.size(30.dp))
     }
 }

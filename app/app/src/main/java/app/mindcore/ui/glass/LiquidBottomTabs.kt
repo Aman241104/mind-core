@@ -1,7 +1,8 @@
 /*
  * Adapted from Kyant0/AndroidLiquidGlass catalog (components/LiquidBottomTabs.kt)
  * https://github.com/Kyant0/AndroidLiquidGlass, Copyright Kyant0, Apache License 2.0
- * Changes: package renamed; accent color is a parameter (mind-core passes the wallpaper color).
+ * Changes: package renamed; accent color, light/dark and glass strength are parameters
+ *          (driven by mind-core's Settings).
  */
 package app.mindcore.ui.glass
 
@@ -69,9 +70,11 @@ fun LiquidBottomTabs(
     tabsCount: Int,
     modifier: Modifier = Modifier,
     accentColor: Color? = null,
+    isLight: Boolean? = null,
+    glass: Float = 1f,
     content: @Composable RowScope.() -> Unit
 ) {
-    val isLightTheme = !isSystemInDarkTheme()
+    val isLightTheme = isLight ?: !isSystemInDarkTheme()
     val accentColor = accentColor
         ?: if (isLightTheme) Color(0xFF0088FF)
         else Color(0xFF0091FF)
@@ -174,8 +177,8 @@ fun LiquidBottomTabs(
                     shape = { Capsule() },
                     effects = {
                         vibrancy()
-                        blur(8f.dp.toPx())
-                        lens(24f.dp.toPx(), 24f.dp.toPx())
+                        blur(8f.dp.toPx() * (0.5f + glass / 2f))
+                        if (glass > 0f) lens(24f.dp.toPx() * glass, 24f.dp.toPx() * glass)
                     },
                     layerBlock = {
                         val progress = dampedDragAnimation.pressProgress
@@ -212,10 +215,10 @@ fun LiquidBottomTabs(
                         effects = {
                             val progress = dampedDragAnimation.pressProgress
                             vibrancy()
-                            blur(8f.dp.toPx())
-                            lens(
-                                24f.dp.toPx() * progress,
-                                24f.dp.toPx() * progress
+                            blur(8f.dp.toPx() * (0.5f + glass / 2f))
+                            if (glass > 0f) lens(
+                                24f.dp.toPx() * progress * glass,
+                                24f.dp.toPx() * progress * glass
                             )
                         },
                         highlight = {
@@ -249,9 +252,9 @@ fun LiquidBottomTabs(
                     shape = { Capsule() },
                     effects = {
                         val progress = dampedDragAnimation.pressProgress
-                        lens(
-                            10f.dp.toPx() * progress,
-                            14f.dp.toPx() * progress,
+                        if (glass > 0f) lens(
+                            10f.dp.toPx() * progress * glass,
+                            14f.dp.toPx() * progress * glass,
                             chromaticAberration = true
                         )
                     },

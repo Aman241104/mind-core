@@ -38,4 +38,5 @@ dependencies {
     implementation(libs.compose.icons.core)
     implementation(libs.backdrop)
     implementation(libs.kyant.shapes)
+    implementation(libs.datastore.preferences)
 }
