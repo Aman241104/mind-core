@@ -65,12 +65,24 @@ def _json_from(text: str) -> dict:
     return json.loads(m[0])
 
 
+# A lean headless call: no tools, MCP servers, skills, hooks or CLAUDE.md, just the prompt. This keeps each
+# call ~500 tokens of overhead instead of ~55k, and nothing in your Claude setup can interfere with it.
+# (--bare would be leaner still, but it only works with an API key, not your Claude plan login.)
+LEAN_FLAGS = ["--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--setting-sources", "",
+              "--no-session-persistence", "--system-prompt", "You extract structured data and reply with JSON only."]
+
+
 def extract_with_claude(sources: list[Source], model: str = "sonnet", timeout: int = 600) -> dict:
     result = subprocess.run(
-        ["claude", "-p", "--model", model, "--output-format", "json"],
-        input=build_prompt(sources), capture_output=True, text=True, timeout=timeout,
+        ["claude", "-p", "--model", model, "--output-format", "json", *LEAN_FLAGS],
+        input=build_prompt(sources), capture_output=True, text=True, timeout=timeout, cwd="/tmp",
     )
-    if result.returncode != 0:
-        raise RuntimeError(f"claude -p failed: {result.stderr[-500:]}")
-    envelope = json.loads(result.stdout)
+    try:
+        envelope = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        envelope = {}
+    # claude -p reports its errors (usage limit, login, ...) in the JSON result, not on stderr.
+    if result.returncode != 0 or envelope.get("is_error"):
+        reason = envelope.get("result") or result.stderr.strip() or result.stdout.strip()[:300] or f"exit {result.returncode}"
+        raise RuntimeError(f"claude -p failed: {reason}")
     return _json_from(envelope.get("result", ""))
