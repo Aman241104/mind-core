@@ -44,3 +44,19 @@ def test_triage_own_repo_is_work():
     msgs = parse_messages("[1/1/26, 1:00:00 PM] You: https://github.com/mehtatechteam/raising-web\n")
     t = triage(extract_links(msgs)[0])
     assert t.shelf == "work" and t.mine
+
+
+def test_shared_vectors():
+    """Same examples the Cloudflare worker is tested with (shared/vectors.json)."""
+    import json
+    from datetime import datetime
+    from pathlib import Path
+
+    from mindcore.whatsapp import Link
+
+    v = json.loads((Path(__file__).parents[2] / "shared" / "vectors.json").read_text())
+    for raw, want in v["normalize"]:
+        assert normalize_url(raw) == want, raw
+    for url, note, title, want in v["shelf"]:
+        link = Link(url, url, url.split("/")[2], datetime(2026, 1, 1), note, title or None, False, 0)
+        assert triage(link).shelf == want, url

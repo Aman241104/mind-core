@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mindcore",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "observability": { "enabled": true },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "mindcore", "database_id": "9032db56-c5f8-471c-9813-34da3bb59422", "migrations_dir": "migrations" }
+  ],
+  "vectorize": [{ "binding": "VEC", "index_name": "mindcore-items", "remote": true }],
+  "ai": { "binding": "AI", "remote": true },
+  // Hands back jobs whose worker vanished mid-lease.
+  "triggers": { "crons": ["*/5 * * * *"] }
+}

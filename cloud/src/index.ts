@@ -1,0 +1,353 @@
+// mind-core API on Cloudflare Workers: saves in, items out, jobs for the laptop brain, hybrid search.
+import { kindHint, normalizeUrl, shortHash, triage } from "./links.ts";
+
+export interface Env {
+  DB: D1Database;
+  VEC: VectorizeIndex;
+  AI: Ai;
+  API_TOKEN: string; // the phone
+  BRAIN_TOKEN: string; // the laptop
+}
+
+const EMBED_MODEL = "@cf/baai/bge-m3"; // multilingual (Hindi/Hinglish), 1024 dims
+const LEASE_MINUTES = 15;
+const BRAIN_ONLINE_SECONDS = 120;
+
+type Json = Record<string, unknown>;
+const json = (data: unknown, status = 200) =>
+  new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+const bad = (message: string, status = 400) => json({ error: message }, status);
+
+function authorized(req: Request, env: Env, who: "phone" | "brain"): boolean {
+  const token = req.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
+  // The brain may also use phone endpoints (e.g. to import the WhatsApp backlog).
+  return who === "phone" ? token === env.API_TOKEN || token === env.BRAIN_TOKEN : token === env.BRAIN_TOKEN;
+}
+
+export default {
+  async fetch(req: Request, env: Env): Promise<Response> {
+    const url = new URL(req.url);
+    const path = url.pathname;
+    try {
+      if (path === "/v1/health") return json({ ok: true });
+      if (path.startsWith("/v1/brain/")) {
+        if (!authorized(req, env, "brain")) return bad("unauthorized", 401);
+        if (path === "/v1/brain/heartbeat" && req.method === "POST") return await heartbeat(req, env);
+        if (path === "/v1/brain/claim" && req.method === "POST") return await claim(req, env);
+        if (path === "/v1/brain/complete" && req.method === "POST") return await complete(req, env);
+        if (path === "/v1/brain/fail" && req.method === "POST") return await fail(req, env);
+        return bad("not found", 404);
+      }
+      if (!authorized(req, env, "phone")) return bad("unauthorized", 401);
+      if (path === "/v1/saves" && req.method === "POST") return await addSaves(req, env);
+      if (path === "/v1/saves" && req.method === "GET") return await listSaves(url, env);
+      if (path === "/v1/items" && req.method === "GET") return await listItems(url, env);
+      const itemMatch = path.match(/^\/v1\/items\/([0-9a-f]{16})$/);
+      if (itemMatch && req.method === "GET") return await getItem(itemMatch[1], env);
+      if (itemMatch && req.method === "PATCH") return await patchItem(itemMatch[1], req, env);
+      if (path === "/v1/search" && req.method === "POST") return await search(req, env);
+      if (path === "/v1/status" && req.method === "GET") return await status(env);
+      return bad("not found", 404);
+    } catch (e) {
+      return bad(e instanceof Error ? e.message : String(e), 500);
+    }
+  },
+
+  // Every 5 minutes: hand back jobs whose worker vanished mid-lease.
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    await env.DB.prepare(
+      `UPDATE jobs SET status = 'pending', lease_until = NULL, updated_at = datetime('now')
+       WHERE status = 'leased' AND lease_until < datetime('now')`,
+    ).run();
+  },
+} satisfies ExportedHandler<Env>;
+
+// ---------- saves ----------
+
+interface SaveIn { url?: string; text?: string; note?: string; title?: string; source?: string; saved_at?: string }
+
+async function addSaves(req: Request, env: Env): Promise<Response> {
+  const body = (await req.json()) as { saves?: SaveIn[] };
+  const saves = body.saves ?? [];
+  if (!Array.isArray(saves) || saves.length === 0 || saves.length > 500) return bad("send 1-500 saves");
+  const counts = { added: 0, duplicate: 0, skipped: 0, queued: 0, invalid: 0 };
+  const statements: D1PreparedStatement[] = [];
+  for (const s of saves) {
+    if (!s.url) { counts.invalid++; continue; } // text/image saves arrive in M2
+    let norm: string;
+    try { norm = normalizeUrl(s.url); } catch { counts.invalid++; continue; }
+    const t = triage(norm, s.note ?? "", s.title ?? "");
+    if (t.shelf === "skip") { counts.skipped++; continue; }
+    const id = await shortHash(norm);
+    const kind = kindHint(norm);
+    const exists = await env.DB.prepare("SELECT 1 FROM saves WHERE id = ?").bind(id).first();
+    if (exists) { counts.duplicate++; continue; }
+    counts.added++;
+    // Work links are just filed; learning and unsure ones get processed by the brain.
+    const process = t.shelf !== "work";
+    statements.push(
+      env.DB.prepare(
+        `INSERT INTO saves (id, url, raw_url, host, kind_hint, shelf, mine, title, note, source, saved_at, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(id, norm, s.url, new URL(norm).hostname, kind, t.shelf, t.mine ? 1 : 0, s.title ?? null, s.note ?? null,
+        s.source ?? "share", s.saved_at ?? new Date().toISOString(), process ? "queued" : "done"),
+    );
+    if (process) {
+      counts.queued++;
+      statements.push(env.DB.prepare("INSERT INTO jobs (save_id, type) VALUES (?, ?)").bind(id, kind));
+    }
+  }
+  if (statements.length) await env.DB.batch(statements);
+  return json(counts);
+}
+
+async function listSaves(url: URL, env: Env): Promise<Response> {
+  const shelf = url.searchParams.get("shelf");
+  const st = url.searchParams.get("status");
+  const limit = Math.min(Number(url.searchParams.get("limit") ?? 100), 500);
+  const where: string[] = [];
+  const args: unknown[] = [];
+  if (shelf) { where.push("shelf = ?"); args.push(shelf); }
+  if (st) { where.push("status = ?"); args.push(st); }
+  const sql = `SELECT id, url, host, kind_hint, shelf, mine, title, note, source, saved_at, status, error, creator, promo
+               FROM saves ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY saved_at DESC LIMIT ?`;
+  const rows = await env.DB.prepare(sql).bind(...args, limit).all();
+  return json(rows.results);
+}
+
+// ---------- items ----------
+
+async function listItems(url: URL, env: Env): Promise<Response> {
+  const where: string[] = [];
+  const args: unknown[] = [];
+  for (const f of ["kind", "shelf", "trust", "status"]) {
+    const v = url.searchParams.get(f);
+    if (v) { where.push(`${f} = ?`); args.push(v); }
+  }
+  const limit = Math.min(Number(url.searchParams.get("limit") ?? 100), 500);
+  const rows = await env.DB.prepare(
+    `SELECT i.*, (SELECT COUNT(*) FROM item_sources s WHERE s.item_id = i.id) AS source_count
+     FROM items i ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY updated_at DESC LIMIT ?`,
+  ).bind(...args, limit).all();
+  return json(rows.results.map(parseItem));
+}
+
+function parseItem(row: Record<string, unknown>) {
+  return { ...row, verification: row.verification ? JSON.parse(String(row.verification)) : null };
+}
+
+async function getItem(id: string, env: Env): Promise<Response> {
+  const item = await env.DB.prepare("SELECT * FROM items WHERE id = ?").bind(id).first();
+  if (!item) return bad("no such item", 404);
+  const sources = await env.DB.prepare(
+    `SELECT s.id, s.url, s.creator, s.caption, s.saved_at, s.promo, x.claims, x.needs_frames
+     FROM item_sources x JOIN saves s ON s.id = x.save_id WHERE x.item_id = ? ORDER BY s.saved_at DESC`,
+  ).bind(id).all();
+  const related = await env.DB.prepare(
+    `SELECT r.type, i.id, i.name, i.kind, i.trust FROM relations r JOIN items i ON i.id = r.b WHERE r.a = ?
+     UNION SELECT r.type, i.id, i.name, i.kind, i.trust FROM relations r JOIN items i ON i.id = r.a WHERE r.b = ?`,
+  ).bind(id, id).all();
+  return json({
+    ...parseItem(item),
+    sources: sources.results.map((s) => ({ ...s, claims: s.claims ? JSON.parse(String(s.claims)) : [] })),
+    related: related.results,
+  });
+}
+
+async function patchItem(id: string, req: Request, env: Env): Promise<Response> {
+  const body = (await req.json()) as { status?: string; user_note?: string };
+  const allowed = new Set(["new", "want", "trying", "done", "skip"]);
+  if (body.status && !allowed.has(body.status)) return bad("bad status");
+  await env.DB.prepare(
+    `UPDATE items SET status = COALESCE(?, status), user_note = COALESCE(?, user_note), updated_at = datetime('now')
+     WHERE id = ?`,
+  ).bind(body.status ?? null, body.user_note ?? null, id).run();
+  return getItem(id, env);
+}
+
+// ---------- brain ----------
+
+async function heartbeat(req: Request, env: Env): Promise<Response> {
+  const info = await req.text();
+  await env.DB.prepare(
+    `INSERT INTO brain (id, last_seen, info) VALUES ('laptop', datetime('now'), ?)
+     ON CONFLICT(id) DO UPDATE SET last_seen = excluded.last_seen, info = excluded.info`,
+  ).bind(info || null).run();
+  return json({ ok: true });
+}
+
+async function claim(req: Request, env: Env): Promise<Response> {
+  const body = (await req.json()) as { types?: string[]; limit?: number };
+  const limit = Math.min(body.limit ?? 8, 25);
+  const types = body.types?.length ? body.types : ["reel", "post", "page", "github", "chat_share"];
+  const placeholders = types.map(() => "?").join(",");
+  // One statement, so two workers can't lease the same job.
+  const leased = await env.DB.prepare(
+    `UPDATE jobs SET status = 'leased', attempts = attempts + 1, updated_at = datetime('now'),
+       lease_until = datetime('now', '+${LEASE_MINUTES} minutes')
+     WHERE id IN (SELECT id FROM jobs WHERE runner = 'brain' AND status = 'pending' AND type IN (${placeholders})
+                  ORDER BY id LIMIT ?)
+     RETURNING id, save_id, type, attempts`,
+  ).bind(...types, limit).all<{ id: number; save_id: string; type: string; attempts: number }>();
+  if (!leased.results.length) return json([]);
+  const ids = leased.results.map((j) => j.save_id);
+  const saves = await env.DB.prepare(
+    `SELECT id, url, kind_hint, shelf, title, note, saved_at FROM saves WHERE id IN (${ids.map(() => "?").join(",")})`,
+  ).bind(...ids).all();
+  const byId = new Map(saves.results.map((s) => [s.id, s]));
+  await env.DB.prepare(
+    `UPDATE saves SET status = 'processing' WHERE id IN (${ids.map(() => "?").join(",")})`,
+  ).bind(...ids).run();
+  return json(leased.results.map((j) => ({ ...j, save: byId.get(j.save_id) })));
+}
+
+interface ItemIn {
+  kind: string; name: string; url?: string | null; one_line?: string; claims?: string[];
+  needs_frames?: boolean; canonical_key?: string; trust?: string; verification?: Json;
+}
+interface CompleteIn {
+  job_id: number;
+  save: { creator?: string; caption?: string; transcript?: string; language?: string; promo?: boolean; shelf?: string };
+  items: ItemIn[];
+}
+
+async function complete(req: Request, env: Env): Promise<Response> {
+  const body = (await req.json()) as CompleteIn;
+  const job = await env.DB.prepare("SELECT save_id FROM jobs WHERE id = ?").bind(body.job_id).first<{ save_id: string }>();
+  if (!job) return bad("no such job", 404);
+  const saveId = job.save_id;
+  const s = body.save ?? {};
+  // The brain decides "unsure" saves; only learning ones keep their items.
+  const shelf = s.shelf === "work" || s.shelf === "learning" ? s.shelf : undefined;
+  const statements: D1PreparedStatement[] = [
+    env.DB.prepare(
+      `UPDATE saves SET status = 'done', error = NULL, creator = ?, caption = ?, transcript = ?, language = ?, promo = ?,
+         shelf = COALESCE(?, shelf) WHERE id = ?`,
+    ).bind(s.creator ?? null, s.caption ?? null, s.transcript ?? null, s.language ?? null,
+      s.promo == null ? null : s.promo ? 1 : 0, shelf ?? null, saveId),
+    env.DB.prepare("UPDATE jobs SET status = 'done', error = NULL, updated_at = datetime('now') WHERE id = ?").bind(body.job_id),
+  ];
+
+  const items = shelf === "work" ? [] : body.items ?? [];
+  const itemIds: string[] = [];
+  const vectors: VectorizeVector[] = [];
+  for (const it of items) {
+    if (!it.name || !it.kind) continue;
+    const key = it.canonical_key || `name:${it.kind}:${it.name.toLowerCase().replace(/\s+/g, " ").trim()}`;
+    const id = await shortHash(key);
+    itemIds.push(id);
+    const claims = JSON.stringify(it.claims ?? []);
+    statements.push(
+      // A second reel about the same repo updates facts but never downgrades trust or loses your status.
+      env.DB.prepare(
+        `INSERT INTO items (id, canonical_key, kind, name, url, one_line, trust, verification)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           url = COALESCE(excluded.url, items.url),
+           one_line = COALESCE(items.one_line, excluded.one_line),
+           verification = COALESCE(excluded.verification, items.verification),
+           trust = CASE WHEN excluded.trust = 'verified' THEN 'verified' ELSE items.trust END,
+           updated_at = datetime('now')`,
+      ).bind(id, key, it.kind, it.name, it.url ?? null, it.one_line ?? null, it.trust ?? "unconfirmed",
+        it.verification ? JSON.stringify(it.verification) : null),
+      env.DB.prepare(
+        `INSERT INTO item_sources (item_id, save_id, claims, needs_frames) VALUES (?, ?, ?, ?)
+         ON CONFLICT(item_id, save_id) DO UPDATE SET claims = excluded.claims, needs_frames = excluded.needs_frames`,
+      ).bind(id, saveId, claims, it.needs_frames ? 1 : 0),
+      env.DB.prepare("DELETE FROM items_fts WHERE item_id = ?").bind(id),
+      env.DB.prepare("INSERT INTO items_fts (item_id, name, one_line, claims) VALUES (?, ?, ?, ?)")
+        .bind(id, it.name, it.one_line ?? "", (it.claims ?? []).join(" ")),
+    );
+    vectors.push({
+      id,
+      values: [], // filled below in one embedding call
+      metadata: { kind: it.kind, shelf: "learning", trust: it.trust ?? "unconfirmed" },
+    });
+  }
+  // Items from the same save are related.
+  for (let i = 0; i < itemIds.length; i++)
+    for (let j = i + 1; j < itemIds.length; j++) {
+      const [a, b] = [itemIds[i], itemIds[j]].sort();
+      if (a !== b)
+        statements.push(env.DB.prepare("INSERT OR IGNORE INTO relations (a, b, type) VALUES (?, ?, 'mentioned_together')").bind(a, b));
+    }
+  await env.DB.batch(statements);
+
+  if (vectors.length) {
+    const texts = items.filter((it) => it.name && it.kind)
+      .map((it) => `${it.kind}: ${it.name}. ${it.one_line ?? ""} ${(it.claims ?? []).join(". ")}`);
+    const out = (await env.AI.run(EMBED_MODEL, { text: texts })) as { data: number[][] };
+    out.data.forEach((v, i) => (vectors[i].values = v));
+    await env.VEC.upsert(vectors);
+  }
+  return json({ ok: true, items: itemIds.length });
+}
+
+async function fail(req: Request, env: Env): Promise<Response> {
+  const body = (await req.json()) as { job_id: number; error: string; retry?: boolean };
+  const job = await env.DB.prepare("SELECT save_id, attempts FROM jobs WHERE id = ?").bind(body.job_id)
+    .first<{ save_id: string; attempts: number }>();
+  if (!job) return bad("no such job", 404);
+  const giveUp = !body.retry || job.attempts >= 3;
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE jobs SET status = ?, error = ?, lease_until = NULL, updated_at = datetime('now') WHERE id = ?`,
+    ).bind(giveUp ? "failed" : "pending", body.error.slice(0, 1000), body.job_id),
+    env.DB.prepare("UPDATE saves SET status = ?, error = ? WHERE id = ?")
+      .bind(giveUp ? "failed" : "queued", body.error.slice(0, 1000), job.save_id),
+  ]);
+  return json({ ok: true, gave_up: giveUp });
+}
+
+// ---------- search & status ----------
+
+async function search(req: Request, env: Env): Promise<Response> {
+  const body = (await req.json()) as { q: string; kind?: string; trust?: string; limit?: number };
+  if (!body.q?.trim()) return bad("empty query");
+  const limit = Math.min(body.limit ?? 10, 50);
+  const filter: VectorizeVectorMetadataFilter = { shelf: "learning" };
+  if (body.kind) filter.kind = body.kind;
+  if (body.trust) filter.trust = body.trust;
+
+  // Meaning search and keyword search, merged with reciprocal rank fusion.
+  const emb = (await env.AI.run(EMBED_MODEL, { text: [body.q] })) as { data: number[][] };
+  const [vec, fts] = await Promise.all([
+    env.VEC.query(emb.data[0], { topK: 30, filter }),
+    env.DB.prepare(
+      `SELECT f.item_id FROM items_fts f JOIN items i ON i.id = f.item_id
+       WHERE items_fts MATCH ? ${body.kind ? "AND i.kind = ?" : ""} ${body.trust ? "AND i.trust = ?" : ""}
+       ORDER BY bm25(items_fts) LIMIT 30`,
+    ).bind(ftsQuery(body.q), ...[body.kind, body.trust].filter(Boolean)).all<{ item_id: string }>(),
+  ]);
+  const score = new Map<string, number>();
+  vec.matches.forEach((m, rank) => score.set(m.id, (score.get(m.id) ?? 0) + 1 / (60 + rank)));
+  fts.results.forEach((r, rank) => score.set(r.item_id, (score.get(r.item_id) ?? 0) + 1 / (60 + rank)));
+  const top = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([id]) => id);
+  if (!top.length) return json([]);
+  const rows = await env.DB.prepare(`SELECT * FROM items WHERE id IN (${top.map(() => "?").join(",")})`).bind(...top).all();
+  const byId = new Map(rows.results.map((r) => [r.id as string, parseItem(r)]));
+  return json(top.map((id) => byId.get(id)).filter(Boolean));
+}
+
+/** Turn free text into a safe FTS5 query: each word as a prefix term, OR-ed. */
+function ftsQuery(q: string): string {
+  const words = q.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  return words.map((w) => `"${w}"*`).join(" OR ") || '""';
+}
+
+async function status(env: Env): Promise<Response> {
+  const [brain, jobs, saves, items] = await Promise.all([
+    env.DB.prepare(
+      `SELECT last_seen, info, (strftime('%s','now') - strftime('%s', last_seen)) AS age FROM brain WHERE id = 'laptop'`,
+    ).first<{ last_seen: string; info: string; age: number }>(),
+    env.DB.prepare("SELECT status, COUNT(*) AS n FROM jobs GROUP BY status").all(),
+    env.DB.prepare("SELECT shelf, COUNT(*) AS n FROM saves GROUP BY shelf").all(),
+    env.DB.prepare("SELECT kind, COUNT(*) AS n FROM items GROUP BY kind").all(),
+  ]);
+  return json({
+    laptop: { online: !!brain && brain.age < BRAIN_ONLINE_SECONDS, last_seen: brain?.last_seen ?? null },
+    jobs: Object.fromEntries(jobs.results.map((r) => [r.status, r.n])),
+    saves: Object.fromEntries(saves.results.map((r) => [r.shelf, r.n])),
+    items: Object.fromEntries(items.results.map((r) => [r.kind, r.n])),
+  });
+}

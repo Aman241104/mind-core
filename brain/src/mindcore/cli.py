@@ -43,6 +43,24 @@ def cmd_import(args: argparse.Namespace) -> None:
     print(f"wrote {out}")
 
 
+def cmd_push(args: argparse.Namespace) -> None:
+    from .brain import push_export
+
+    print(push_export(Path(args.export)))
+
+
+def cmd_brain(args: argparse.Namespace) -> None:
+    from .brain import run
+
+    run(once=args.once, batch=args.batch)
+
+
+def cmd_status(args: argparse.Namespace) -> None:
+    from .brain import Api
+
+    print(json.dumps(Api().get("/v1/status"), indent=1))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="mindcore")
     sub = parser.add_subparsers(required=True)
@@ -50,5 +68,14 @@ def main() -> None:
     p.add_argument("export")
     p.add_argument("--out", default="../out/import.json")
     p.set_defaults(func=cmd_import)
+    p = sub.add_parser("push", help="send a WhatsApp export's links to the mind-core API")
+    p.add_argument("export")
+    p.set_defaults(func=cmd_push)
+    p = sub.add_parser("brain", help="process jobs from the API (runs until stopped)")
+    p.add_argument("--once", action="store_true", help="exit when the queue is empty")
+    p.add_argument("--batch", type=int, default=6, help="saves per extraction call")
+    p.set_defaults(func=cmd_brain)
+    p = sub.add_parser("status", help="show API status: laptop, jobs, saves, items")
+    p.set_defaults(func=cmd_status)
     args = parser.parse_args()
     args.func(args)
