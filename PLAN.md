@@ -463,17 +463,15 @@ between states that *mean* something:
 - **P3:** Brainstorm boards + auto-connections + graph view + streaming Ask with GraphRAG-lite.
 - **P4:** resurfacing/incubation, tasks from notes into the calendar, flashcards, Obsidian two-way sync.
 
-### Status (end of 2026-09-27)
-- **P1 done.** Lotus Studio design + Swan mascot (0.2.x).
-- **Graph view done** (0.3.0, pulled forward from P3): `/v1/graph`, cron `linkSimilar` (bge-m3 ≥0.72, 4/item,
-  `items.linked_at`), Compose force layout (GraphScreen.kt), For You header button + "See in graph" on items.
-- **P2 mostly done** (0.4.0): Notes tab (NotesScreen.kt), editor (NoteEditor.kt: markdown, tickable checkboxes,
-  [[links]] picker, autosave, stages, colours, trash), Talk it out (voice → tidy note/idea). Installed on the phone.
-- **Next (tomorrow):**
-  1. P2 leftovers: "Today" home (For You → Today: pinned ideas, open tasks, deadlines, fresh finds); trash view
-     + restore; capture sheet / edge drawer "save as note"; note search in Library search.
-  2. Test on the phone: graph (pinch/drag/tap), notes editor, Talk it out; edge drawer pill + handle (task #5).
-  3. P3: brainstorm boards, streaming GraphRAG Ask + faster list answers.
-  4. P4: resurfacing, tasks → calendar, flashcards, Obsidian sync.
-  5. Small: verified repos should use the GitHub description as one-liner.
-
+### Status (2026-09-28)
+All four phases are built and deployed; app 0.8.0 published (0.7.0 installed on the phone at last check).
+- **P1** Lotus Studio + Swan. **P2** Notes/Ideas tab, editor, Talk it out, Today home (jot, to-dos, ideas in motion),
+  trash + restore, text captures → note/idea.
+- **P3** graph (0.3.0), streaming Ask + GraphRAG-lite (graph neighbours before rerank), Brainstorm with Swan
+  (expand / questions / next / connect), brainstorm boards (canvas, connect, Swan ideas).
+- **P4** Revisit (`/v1/resurface`), dated to-dos → calendar/Coming up (`note_dues`), flashcards + SM-2 review,
+  Obsidian two-way sync (`mindcore obsidian`, brain every 5 min, `~/Obsidian Vault/40 - mind-core/`).
+- Lesson: gpt-oss-120b spends max_tokens on reasoning first → always `reasoning: {effort: "low"}` and budgets ≥1500.
+- **Next:** hands-on phone test of everything since 0.3.0 (graph gestures, boards drag/connect, editor, review flip,
+  Talk it out) + edge drawer (task #5); fix what that finds. Then: Obsidian flashcards export (#flashcards format for
+  the Spaced Repetition plugin), board ↔ note links in the graph, GitHub description as one-liner for verified repos.
