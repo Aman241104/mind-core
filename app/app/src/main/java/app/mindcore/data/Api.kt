@@ -17,6 +17,15 @@ data class GraphNode(val id: String, val label: String, val kind: String, val is
 /** type: mention (your link) | mentioned_together (same save) | related (note, by meaning) | similar (items, by meaning) */
 data class GraphEdge(val a: String, val b: String, val type: String)
 
+data class NoteSummary(
+    val id: String, val kind: String, val title: String, val preview: String, val stage: String?, val color: Int,
+    val pinned: Boolean, val favorite: Boolean, val words: Int, val tasks: Int, val tasksDone: Int, val updatedAt: String,
+    val voiceUrl: String?,
+)
+/** A link out of a note (or into it, for backlinks). type: mention | related. */
+data class NoteLink(val id: String, val title: String, val kind: String, val type: String, val isItem: Boolean)
+data class NoteDetail(val summary: NoteSummary, val body: String, val links: List<NoteLink>, val backlinks: List<NoteLink>)
+
 data class ApiItem(
     val id: String,
     val kind: String,
@@ -130,6 +139,43 @@ class Api(private val baseUrl: String, private val token: String) {
             },
             (0 until e.length()).map { e.getJSONObject(it) }.map { GraphEdge(it.getString("a"), it.getString("b"), it.getString("type")) },
         )
+    }
+
+    // ---------- notes + ideas ----------
+
+    suspend fun notes(kind: String? = null, trash: Boolean = false): List<NoteSummary> {
+        val q = listOfNotNull(kind?.let { "kind=$it" }, if (trash) "trash=1" else null).joinToString("&")
+        val a = JSONArray(call("GET", "/v1/notes" + if (q.isEmpty()) "" else "?$q"))
+        return (0 until a.length()).map { parseNoteSummary(a.getJSONObject(it)) }
+    }
+
+    suspend fun note(id: String): NoteDetail = parseNote(JSONObject(call("GET", "/v1/notes/$id")))
+
+    suspend fun createNote(fields: JSONObject): NoteDetail = parseNote(JSONObject(call("POST", "/v1/notes", fields)))
+
+    suspend fun updateNote(id: String, fields: JSONObject): NoteDetail = parseNote(JSONObject(call("PATCH", "/v1/notes/$id", fields)))
+
+    suspend fun deleteNote(id: String, restore: Boolean = false) {
+        call("DELETE", "/v1/notes/$id" + if (restore) "?restore=1" else "")
+    }
+
+    /** Transcribe + tidy a recording into a new note or idea (takes a few seconds on the server). */
+    suspend fun noteFromVoice(voiceUrl: String, kind: String): NoteDetail =
+        parseNote(JSONObject(call("POST", "/v1/notes/voice", JSONObject().put("voice_url", voiceUrl).put("kind", kind))))
+
+    private fun parseNoteSummary(o: JSONObject) = NoteSummary(
+        o.getString("id"), o.getString("kind"), o.optString("title"), o.optString("preview"), o.optStringOrNull("stage"),
+        o.optInt("color"), o.optBoolean("pinned"), o.optBoolean("favorite"), o.optInt("words"), o.optInt("tasks"),
+        o.optInt("tasks_done"), o.optString("updated_at"), o.optStringOrNull("voice_url"),
+    )
+
+    private fun parseNote(o: JSONObject): NoteDetail {
+        fun links(key: String) = o.optJSONArray(key)?.let { a ->
+            (0 until a.length()).map { a.getJSONObject(it) }.map {
+                NoteLink(it.getString("id"), it.optString("title"), it.optString("kind"), it.optString("type"), it.optString("dst_type") == "item")
+            }
+        }.orEmpty()
+        return NoteDetail(parseNoteSummary(o), o.optString("body"), links("links"), links("backlinks"))
     }
 
     suspend fun upcoming(): List<Upcoming> {

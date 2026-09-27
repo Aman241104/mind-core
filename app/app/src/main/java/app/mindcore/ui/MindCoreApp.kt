@@ -104,15 +104,20 @@ fun MindCoreApp() {
         var showCalendar by rememberSaveable { mutableStateOf(false) }
         var showGraph by rememberSaveable { mutableStateOf(false) }
         var graphFocus by rememberSaveable { mutableStateOf<String?>(null) }
+        // Note editor: a note id, or "new:note" / "new:idea".
+        var editNote by rememberSaveable { mutableStateOf<String?>(null) }
+        val notes = remember(library) { NotesState() }
+        LaunchedEffect(tab, editNote, library) { if (tab == 2 && editNote == null) notes.refresh(library.api) }
         val askState = remember { AskState() }
         // A widget tap can ask to open an item.
         val requested by app.mindcore.Nav.openItem.collectAsState()
         LaunchedEffect(requested) { requested?.let { openItem = it; app.mindcore.Nav.openItem.value = null } }
         val backdrop = rememberLayerBackdrop()
         val haptics = LocalHapticFeedback.current
-        BackHandler(enabled = showSettings || showGlass || showBlob || showCalendar || showGraph || openItem != null) {
+        BackHandler(enabled = showSettings || showGlass || showBlob || showCalendar || showGraph || openItem != null || editNote != null) {
             when {
                 openItem != null -> openItem = null
+                editNote != null -> editNote = null
                 showBlob -> showBlob = false
                 showCalendar -> showCalendar = false
                 showGraph -> { showGraph = false; graphFocus = null }
@@ -143,7 +148,17 @@ fun MindCoreApp() {
                             onChanged = library::replace,
                             onShowInGraph = { id -> graphFocus = id; showGraph = true; openItem = null },
                         )
-                        showGraph && api != null -> GraphScreen(api, onBack = { showGraph = false; graphFocus = null }, onOpen = { id -> openItem = id }, focus = graphFocus)
+                        editNote != null && api != null -> NoteEditor(
+                            api = api,
+                            id = editNote?.takeUnless { it.startsWith("new:") },
+                            newKind = editNote?.removePrefix("new:") ?: "note",
+                            linkNames = notes.notes.filter { it.title.isNotBlank() }.map { it.title to it.kind } +
+                                library.items.map { it.name to it.kind },
+                            onBack = { editNote = null },
+                            onOpenItem = { id -> openItem = id },
+                            onOpenNote = { id -> editNote = id },
+                        )
+                        showGraph && api != null -> GraphScreen(api, onBack = { showGraph = false; graphFocus = null }, onOpen = { id -> openItem = id }, focus = graphFocus, onOpenNote = { id -> editNote = id })
                         showCalendar && api != null -> CalendarScreen(api, onBack = { showCalendar = false }, onOpen = { id -> openItem = id })
                         tab == 0 -> ForYouScreen(
                             library,
@@ -155,10 +170,11 @@ fun MindCoreApp() {
                             onGraph = { showGraph = true },
                         )
                         tab == 1 -> LibraryScreen(library, libraryQuery, onOpen = { id -> openItem = id })
+                        tab == 2 -> NotesScreen(api, notes, onOpen = { id -> editNote = id }, onNew = { k -> editNote = "new:$k" })
                         else -> AskScreen(askState, library.api, settings.research, onOpenItem = { id -> openItem = id })
                     }
                 }
-                if (!showSettings && !showGlass && !showBlob && !showCalendar && !showGraph && openItem == null) {
+                if (!showSettings && !showGlass && !showBlob && !showCalendar && !showGraph && openItem == null && editNote == null) {
                     // Pass a lambda that reads the state (not the Int), so the glass puck sees every change.
                     BottomBar(
                         selected = { tab },

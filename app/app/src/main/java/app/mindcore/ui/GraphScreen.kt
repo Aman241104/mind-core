@@ -176,7 +176,7 @@ private class Layout(val graph: Graph) {
 }
 
 @Composable
-fun GraphScreen(api: Api, onBack: () -> Unit, onOpen: (String) -> Unit, focus: String? = null) {
+fun GraphScreen(api: Api, onBack: () -> Unit, onOpen: (String) -> Unit, focus: String? = null, onOpenNote: (String) -> Unit = {}) {
     var graph by remember { mutableStateOf<Graph?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { runCatching { api.graph() }.onSuccess { graph = it }.onFailure { error = it.message } }
@@ -191,7 +191,7 @@ fun GraphScreen(api: Api, onBack: () -> Unit, onOpen: (String) -> Unit, focus: S
                     color = if (error == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error)
             }
         } else {
-            GraphCanvas(g, focus, onOpen)
+            GraphCanvas(g, focus) { n -> if (n.isNote) onOpenNote(n.id) else onOpen(n.id) }
         }
         TopBar(g, onBack)
     }
@@ -211,7 +211,7 @@ private fun TopBar(g: Graph?, onBack: () -> Unit) {
 }
 
 @Composable
-private fun GraphCanvas(g: Graph, focus: String?, onOpen: (String) -> Unit) {
+private fun GraphCanvas(g: Graph, focus: String?, onOpen: (app.mindcore.data.GraphNode) -> Unit) {
     val layout = remember(g) { Layout(g) }
     val scheme = MaterialTheme.colorScheme
     val dark = scheme.surface.luminance() < 0.5f
@@ -515,9 +515,9 @@ private fun GraphCanvas(g: Graph, focus: String?, onOpen: (String) -> Unit) {
                     Text("Nothing linked yet. Save more around this and it'll connect.", style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant)
                 }
-                if (!node.isNote) {
+                run {
                     Row(
-                        Modifier.fillMaxWidth().height(48.dp).pressScale { onOpen(node.id) }.clip(RoundedCornerShape(50))
+                        Modifier.fillMaxWidth().height(48.dp).pressScale { onOpen(node) }.clip(RoundedCornerShape(50))
                             .background(scheme.inverseSurface),
                         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
                     ) { Text("Open", style = MaterialTheme.typography.labelLarge, color = scheme.inverseOnSurface) }

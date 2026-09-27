@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
@@ -53,6 +54,7 @@ import kotlinx.coroutines.isActive
 internal val tabs = listOf(
     "For You" to Icons.Rounded.Home,
     "Library" to Icons.AutoMirrored.Rounded.List,
+    "Notes" to Icons.Rounded.EditNote,
     "Ask" to Icons.Rounded.Search,
 )
 
