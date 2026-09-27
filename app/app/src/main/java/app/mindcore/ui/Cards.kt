@@ -27,7 +27,7 @@ import app.mindcore.data.Verification
 
 val kindLabels = linkedMapOf(
     "repo" to "Repo", "tool" to "Tool", "course" to "Course", "cert" to "Cert",
-    "job" to "Job", "tip" to "Tip", "other" to "Other",
+    "job" to "Job", "tip" to "Tip", "video" to "Video", "playlist" to "Playlist", "book" to "Book", "other" to "Other",
 )
 
 @Composable
@@ -38,6 +38,8 @@ fun kindColor(kind: String): Color {
         "tool" -> s.tertiary
         "course", "cert" -> s.secondary
         "job" -> Color(0xFF8FD3FF)
+        "video", "playlist" -> Color(0xFFFF8A80)
+        "book" -> Color(0xFFA5D6A7)
         else -> s.outline
     }
 }

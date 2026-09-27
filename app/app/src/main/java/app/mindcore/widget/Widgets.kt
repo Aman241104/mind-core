@@ -84,7 +84,8 @@ private fun capture(context: Context, mode: String? = null): Intent =
 
 private val kindColors = mapOf(
     "repo" to Color(0xFFF5A9BE), "tool" to Color(0xFFBDB6F7), "course" to Color(0xFFF2BFA0),
-    "cert" to Color(0xFFF2BFA0), "job" to Color(0xFF8FD3FF),
+    "cert" to Color(0xFFF2BFA0), "job" to Color(0xFF8FD3FF), "video" to Color(0xFFFF8A80),
+    "playlist" to Color(0xFFFF8A80), "book" to Color(0xFFA5D6A7),
 )
 
 @Composable

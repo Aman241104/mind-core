@@ -79,6 +79,7 @@ const RECENT = /\b(today|this week|last week|recent(ly)?|latest|new(est)?|this m
 const KINDS: [RegExp, string][] = [
   [/\bjobs?\b|hiring|openings?|roles?\b/i, "job"], [/\bcourses?\b/i, "course"], [/\bcert(ificat(e|ion)s?|s)?\b/i, "cert"],
   [/\brepos?(itor(y|ies))?\b/i, "repo"], [/\btools?\b/i, "tool"], [/\btips?\b/i, "tip"],
+  [/\bvideos?\b/i, "video"], [/\bplaylists?\b/i, "playlist"], [/\bbooks?\b|\bpdfs?\b/i, "book"],
 ];
 
 export async function ask(req: Request, env: Env, hybridItems: (q: string, limit: number) => Promise<Record<string, unknown>[]>): Promise<Response> {

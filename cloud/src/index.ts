@@ -99,6 +99,7 @@ export default {
 interface SaveIn {
   url?: string; image_url?: string; text?: string; note?: string; title?: string; source?: string; saved_at?: string;
   voice_url?: string; // a voice note recorded with this save
+  file_url?: string; // a PDF (book, paper) uploaded to your Cloudinary
 }
 type Counts = { added: number; duplicate: number; skipped: number; queued: number; invalid: number };
 
@@ -135,6 +136,11 @@ async function ingest(env: Env, saves: SaveIn[]): Promise<Counts> {
       if (!cloud || !s.image_url.startsWith(`https://res.cloudinary.com/${cloud}/`)) { counts.invalid++; continue; }
       row = { id: await shortHash(s.image_url), url: s.image_url, host: "res.cloudinary.com", kind: "image",
         shelf: "unsure", mine: false, note: s.note ?? null };
+    } else if (s.file_url) {
+      const cloud = cloudinary(env)?.cloud;
+      if (!cloud || !s.file_url.startsWith(`https://res.cloudinary.com/${cloud}/raw/upload/`)) { counts.invalid++; continue; }
+      row = { id: await shortHash(s.file_url), url: s.file_url, host: "res.cloudinary.com", kind: "pdf",
+        shelf: "learning", mine: false, note: s.note ?? null };
     } else if (s.text?.trim()) {
       row = { id: await shortHash("text:" + s.text.trim()), url: null, host: null, kind: "text",
         shelf: "unsure", mine: false, note: s.text.trim().slice(0, 4000) };
@@ -152,7 +158,7 @@ async function ingest(env: Env, saves: SaveIn[]): Promise<Counts> {
       env.DB.prepare(
         `INSERT INTO saves (id, url, raw_url, host, kind_hint, shelf, mine, title, note, source, saved_at, status)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(row.id, row.url, s.url ?? s.image_url ?? null, row.host, row.kind, row.shelf, row.mine ? 1 : 0,
+      ).bind(row.id, row.url, s.url ?? s.image_url ?? s.file_url ?? null, row.host, row.kind, row.shelf, row.mine ? 1 : 0,
         s.title ?? null, row.note, s.source ?? "share", s.saved_at ?? new Date().toISOString(), process ? "queued" : "done"),
       ...(s.voice_url ? [env.DB.prepare("UPDATE saves SET voice_url = ? WHERE id = ?").bind(s.voice_url, row.id)] : []),
     );
@@ -202,7 +208,8 @@ async function signUpload(env: Env): Promise<Response> {
   return json({ cloud_name: c.cloud, api_key: c.key, timestamp, folder, signature,
     upload_url: `https://api.cloudinary.com/v1_1/${c.cloud}/image/upload`,
     // Cloudinary files audio under "video".
-    audio_upload_url: `https://api.cloudinary.com/v1_1/${c.cloud}/video/upload` });
+    audio_upload_url: `https://api.cloudinary.com/v1_1/${c.cloud}/video/upload`,
+    file_upload_url: `https://api.cloudinary.com/v1_1/${c.cloud}/raw/upload` });
 }
 
 async function listSaves(url: URL, env: Env): Promise<Response> {
@@ -283,7 +290,7 @@ async function heartbeat(req: Request, env: Env): Promise<Response> {
 async function claim(req: Request, env: Env): Promise<Response> {
   const body = (await req.json()) as { types?: string[]; limit?: number };
   const limit = Math.min(body.limit ?? 8, 25);
-  const types = body.types?.length ? body.types : ["reel", "post", "page", "github", "chat_share", "image", "text"];
+  const types = body.types?.length ? body.types : ["reel", "post", "page", "github", "chat_share", "image", "text", "video", "playlist", "pdf"];
   const placeholders = types.map(() => "?").join(",");
   // One statement, so two workers can't lease the same job.
   const leased = await env.DB.prepare(

@@ -70,7 +70,7 @@ class ShareActivity : ComponentActivity() {
         // WhatsApp "Export chat": a .zip (or .txt + media). Hand the whole thing to the chat importer.
         val chat = streams.firstOrNull { uri ->
             val t = contentResolver.getType(uri) ?: ""
-            t.contains("zip") || t == "text/plain" || uri.lastPathSegment?.endsWith(".zip", true) == true
+            (t.contains("zip") || t == "text/plain" || uri.lastPathSegment?.endsWith(".zip", true) == true) && t != "application/pdf"
         }
         val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT) ?: ""
         if (chat != null && (subject.contains("WhatsApp", true) || type.contains("zip") || streams.size > 1)) {
@@ -78,7 +78,8 @@ class ShareActivity : ComponentActivity() {
         }
         val text = Capture.fromText(intent.getStringExtra(Intent.EXTRA_TEXT))
         val images = streams.filter { (contentResolver.getType(it) ?: type).startsWith("image/") }
-        return text.copy(images = images)
+        val pdfs = streams.filter { (contentResolver.getType(it) ?: type) == "application/pdf" }
+        return text.copy(images = images, pdfs = pdfs)
     }
 
     @Suppress("DEPRECATION")

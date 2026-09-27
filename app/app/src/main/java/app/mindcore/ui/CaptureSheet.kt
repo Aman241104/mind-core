@@ -113,6 +113,7 @@ fun CaptureContent(
         merged.links.forEach { Row1(hostLabel(it), it.substringAfter("://").substringAfter("/").take(60)) }
         if (merged.links.isEmpty() && !merged.text.isNullOrBlank() && !editable) Row1("Note", merged.text!!.take(140))
         if (merged.images.isNotEmpty()) Thumbs(merged.images)
+        merged.pdfs.forEach { Row1("PDF book", "The laptop reads its title, contents and first pages.") }
 
         if (editable) {
             OutlinedTextField(

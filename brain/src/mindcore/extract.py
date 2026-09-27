@@ -16,7 +16,11 @@ For each source below (caption, speech transcript, and text read off the screen 
 things worth saving.
 
 Rules:
-- kind is one of: repo, tool, cert, course, job, tip, other.
+- kind is one of: repo, tool, cert, course, job, tip, video, playlist, book, other.
+- If the source itself is a YouTube video, a YouTube playlist, or a PDF book/document (the caption says so), the
+  FIRST item is the resource itself: kind video / playlist / book, name = its real title, one_line = what you
+  learn from it, claims = length (minutes / number of videos / pages), level, and key topics. Then list any
+  repos/tools/courses it recommends as separate items.
 - name: the real name. Transcripts are speech-to-text and mishear words ("cloud code" = Claude Code,
   "3.js" = Three.js, "hiding" = hiring). Fix obvious mishearings, but never invent a name that isn't
   said or shown. If the video only says "comment X and I'll DM the link", set name to what it IS

@@ -123,8 +123,112 @@ def fetch_image(url: str) -> Content:
     return Content(screen_text=re.sub(r"[ \t]+", " ", out.stdout).strip()[:8000])
 
 
+def _vtt_text(vtt: str) -> str:
+    """Captions → plain text. Auto-captions repeat each line as it scrolls, so drop consecutive repeats."""
+    out: list[str] = []
+    for line in vtt.splitlines():
+        line = re.sub(r"<[^>]+>", "", line).strip()
+        if not line or "-->" in line or line.startswith(("WEBVTT", "Kind:", "Language:", "NOTE")) or line.isdigit():
+            continue
+        if not out or out[-1] != line:
+            out.append(line)
+    return " ".join(out)
+
+
+def fetch_youtube(url: str) -> Content:
+    """A YouTube video: its own captions + chapters (no audio download for long videos). Short videos with no
+    captions fall back to downloading the audio for Whisper."""
+    with tempfile.TemporaryDirectory(prefix="mindcore-") as tmp:
+        work = Path(tmp)
+        r = _yt_dlp("--skip-download", "--write-info-json", "--write-subs", "--write-auto-subs",
+                    "--sub-langs", "en,en-orig,hi,hi-orig", "--sub-format", "vtt",
+                    # A caption track that fails (YouTube rate-limits these) shouldn't sink the whole save.
+                    "--ignore-errors", "-o", str(work / "v.%(ext)s"), url)
+        info_file = next(work.glob("*.info.json"), None)
+        if not info_file:
+            err = (r.stderr.strip().splitlines() or ["yt-dlp failed"])[-1]
+            raise FetchError(err[:300], retry="Private" not in err and "unavailable" not in err)
+        info = json.loads(info_file.read_text())
+        subs = sorted(work.glob("*.vtt"), key=lambda p: (".en" not in p.name, "orig" in p.name))
+        transcript = _vtt_text(subs[0].read_text(errors="replace")) if subs else ""
+        if not transcript and (info.get("duration") or 0) <= 600:
+            return fetch_video(url)  # short and no captions: transcribe the audio instead
+        chapters = [f"{int(c['start_time'] // 60)}:{int(c['start_time'] % 60):02d} {c['title']}" for c in info.get("chapters") or []]
+        minutes = round((info.get("duration") or 0) / 60)
+        return Content(
+            caption=f"{info.get('title', '')}\n{info.get('description') or ''}"[:3000],
+            transcript=transcript[:12000],
+            screen_text=(f"YouTube video, {minutes} min. Chapters:\n" + "\n".join(chapters)) if chapters else f"YouTube video, {minutes} min.",
+            creator=info.get("channel") or info.get("uploader"),
+            language=info.get("language"),
+            extra={"duration": info.get("duration"), "resource": "video"},
+        )
+
+
+def fetch_playlist(url: str) -> Content:
+    """A YouTube playlist: title, channel and the list of videos, saved as one learning resource."""
+    r = subprocess.run(["uvx", "-q", "yt-dlp@latest", "--flat-playlist", "-J", url], capture_output=True, text=True, timeout=180)
+    if r.returncode != 0:
+        raise FetchError((r.stderr.strip().splitlines() or ["yt-dlp failed"])[-1][:300], retry=True)
+    d = json.loads(r.stdout)
+    entries = d.get("entries") or []
+    total_min = round(sum(e.get("duration") or 0 for e in entries) / 60)
+    lines = [f"{i + 1}. {e.get('title')} ({round((e.get('duration') or 0) / 60)} min)" for i, e in enumerate(entries[:80])]
+    return Content(
+        caption=f"{d.get('title', '')}\n{d.get('description') or ''}"[:3000],
+        screen_text=f"YouTube playlist, {len(entries)} videos, about {total_min} min in total:\n" + "\n".join(lines),
+        creator=d.get("channel") or d.get("uploader"),
+        extra={"videos": len(entries), "resource": "playlist"},
+    )
+
+
+def _cloudinary_download_url(url: str) -> str:
+    """Cloudinary blocks public delivery of PDFs on new free accounts, so fetch our own uploads with a signed,
+    private download link (Admin API) made from the key in ~/stash/.secrets/cloudinary.env."""
+    import hashlib
+    import time
+    from urllib.parse import urlencode
+
+    m = re.match(r"https://res\.cloudinary\.com/([^/]+)/raw/upload/(?:v\d+/)?(.+)$", url)
+    secrets = Path.home() / "stash" / ".secrets" / "cloudinary.env"
+    if not m or not secrets.exists():
+        return url
+    env = dict(line.split("=", 1) for line in secrets.read_text().splitlines() if "=" in line)
+    params = {"public_id": m[2], "timestamp": str(int(time.time())), "type": "upload"}
+    to_sign = "&".join(f"{k}={params[k]}" for k in sorted(params)) + env["CLOUDINARY_SECRET"]
+    params["signature"] = hashlib.sha1(to_sign.encode()).hexdigest()
+    params["api_key"] = env["CLOUDINARY_KEY"]
+    return f"https://api.cloudinary.com/v1_1/{m[1]}/raw/download?{urlencode(params)}"
+
+
+def fetch_pdf(url: str) -> Content:
+    """A book or paper as a PDF: title and page count, plus the text of the first 30 pages (contents, intro)."""
+    resp = httpx.get(_cloudinary_download_url(url), timeout=120, follow_redirects=True, headers={"user-agent": UA})
+    if resp.status_code >= 400:
+        raise FetchError(f"PDF returned HTTP {resp.status_code}", retry=resp.status_code >= 500)
+    with tempfile.NamedTemporaryFile(suffix=".pdf") as f:
+        f.write(resp.content)
+        f.flush()
+        meta = subprocess.run(["pdfinfo", f.name], capture_output=True, text=True, timeout=60).stdout
+        text = subprocess.run(["pdftotext", "-f", "1", "-l", "30", "-layout", f.name, "-"], capture_output=True, text=True, timeout=120).stdout
+    info = dict(line.split(":", 1) for line in meta.splitlines() if ":" in line)
+    title = info.get("Title", "").strip()
+    pages = info.get("Pages", "?").strip()
+    return Content(
+        caption=f"PDF book/document. Title: {title or 'unknown'}. Author: {info.get('Author', '').strip() or 'unknown'}. {pages} pages.",
+        screen_text=re.sub(r"[ \t]+", " ", text)[:15000],
+        extra={"pages": pages, "resource": "book"},
+    )
+
+
 def fetch(save: dict) -> Content:
     kind, url = save["kind_hint"], save["url"]
+    if kind == "video":
+        return fetch_youtube(url)
+    if kind == "playlist":
+        return fetch_playlist(url)
+    if kind == "pdf":
+        return fetch_pdf(url)
     if kind == "text":  # a typed or shared note: the note itself is the content
         return Content(screen_text=save.get("note") or "")
     if kind == "image":

@@ -30,7 +30,11 @@ export function normalizeUrl(raw: string): string {
 export function kindHint(url: string): string {
   const host = new URL(url).hostname;
   if (host === "instagram.com") return url.includes("/reel/") ? "reel" : "post";
-  if (host === "youtube.com") return "reel";
+  if (host === "youtube.com") {
+    if (url.includes("/playlist")) return "playlist";
+    return url.includes("/shorts/") ? "reel" : "video"; // shorts are reels; everything else uses captions
+  }
+  if (/\.pdf($|\?)/i.test(new URL(url).pathname)) return "pdf";
   if (host === "github.com") return "github";
   if (/^(chatgpt\.com|claude\.ai|gemini\.google\.com|share\.gemini\.google|perplexity\.ai)$/.test(host) && url.includes("/share"))
     return "chat_share";
