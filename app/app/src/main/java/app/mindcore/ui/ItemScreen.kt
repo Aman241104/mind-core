@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.CircularProgressIndicator
@@ -65,7 +67,7 @@ import java.time.format.DateTimeFormatter
 private val statuses = listOf("new" to "New", "want" to "Want", "trying" to "Trying", "done" to "Done", "skip" to "Skip")
 
 @Composable
-fun ItemScreen(id: String, api: Api, onBack: () -> Unit, onOpenItem: (String) -> Unit, onChanged: (ApiItem) -> Unit) {
+fun ItemScreen(id: String, api: Api, onBack: () -> Unit, onOpenItem: (String) -> Unit, onChanged: (ApiItem) -> Unit, onShowInGraph: (String) -> Unit = {}) {
     var detail by remember(id) { mutableStateOf<ItemDetail?>(null) }
     var error by remember(id) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -215,6 +217,17 @@ fun ItemScreen(id: String, api: Api, onBack: () -> Unit, onOpenItem: (String) ->
                     Spacer(Modifier.width(10.dp))
                     Text(r.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 }
+            }
+        }
+        item {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(50)).clickable { onShowInGraph(id) }
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(50)).padding(14.dp),
+                horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.Hub, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("See in graph", style = MaterialTheme.typography.labelLarge)
             }
         }
         item { Spacer(Modifier.height(24.dp).windowInsetsBottomHeight(WindowInsets.navigationBars)) }

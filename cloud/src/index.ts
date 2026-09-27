@@ -4,6 +4,7 @@ import { chatLinks } from "./whatsapp.ts";
 import { downloadApk, latestRelease, publishRelease } from "./updates.ts";
 import { addItemVoice, isOwnAudio, transcribe } from "./voice.ts";
 import { backfillDeadlines, calendar, putDeadline, researchDeadline, upcoming } from "./deadlines.ts";
+import { graph, linkSimilar } from "./graph.ts";
 import { createNote, deleteNote, getNote, listNotes, noteFromVoice, updateNote } from "./notes.ts";
 import { ask, claimResearch, createResearch, finishResearch, getResearch, indexSaves, reindex } from "./ask.ts";
 
@@ -46,6 +47,7 @@ export default {
         if (path === "/v1/brain/complete" && req.method === "POST") return await complete(req, env);
         if (path === "/v1/brain/fail" && req.method === "POST") return await fail(req, env);
         if (path === "/v1/brain/reindex" && req.method === "POST") return await reindex(env);
+        if (path === "/v1/brain/link-similar" && req.method === "POST") return json(await linkSimilar(env, 20));
         if (path === "/v1/brain/app" && req.method === "POST") return await publishRelease(req, env);
         if (path === "/v1/brain/deadlines/backfill" && req.method === "POST") return await backfillDeadlines(env);
         if (path === "/v1/brain/research/claim" && req.method === "POST") return await claimResearch(env);
@@ -71,6 +73,7 @@ export default {
       if (note && req.method === "GET") return await getNote(note[1], env);
       if (note && req.method === "PATCH") return await updateNote(note[1], req, env, ctx);
       if (note && req.method === "DELETE") return await deleteNote(note[1], url, env);
+      if (path === "/v1/graph" && req.method === "GET") return await graph(env);
       if (path === "/v1/calendar" && req.method === "GET") return await calendar(url, env);
       if (path === "/v1/upcoming" && req.method === "GET") return await upcoming(env);
       const dl = path.match(/^\/v1\/items\/([0-9a-f]{16})\/(deadline|find-deadline)$/);
@@ -99,6 +102,7 @@ export default {
       `UPDATE jobs SET status = 'pending', lease_until = NULL, updated_at = datetime('now')
        WHERE status = 'leased' AND lease_until < datetime('now')`,
     ).run();
+    await linkSimilar(env); // graph view: link new items to similar ones
   },
 } satisfies ExportedHandler<Env>;
 

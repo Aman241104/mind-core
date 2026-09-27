@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -74,6 +75,7 @@ fun ForYouScreen(
     onOpen: (String) -> Unit,
     onOpenKind: (String?) -> Unit,
     onCalendar: () -> Unit,
+    onGraph: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val items = library.items
@@ -89,7 +91,7 @@ fun ForYouScreen(
     PullToRefreshBox(isRefreshing = library.loading, onRefresh = { scope.launch { library.refresh() } }) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 140.dp)) {
             item { Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars)) }
-            item { Header(onSettings, onCalendar) }
+            item { Header(onSettings, onCalendar, onGraph) }
             item { UpdateBanner(updates, Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) }
             item { Processing(library) }
             if (!library.paired) item {
@@ -166,7 +168,7 @@ fun ForYouScreen(
 }
 
 @Composable
-private fun Header(onSettings: () -> Unit, onCalendar: () -> Unit) {
+private fun Header(onSettings: () -> Unit, onCalendar: () -> Unit, onGraph: () -> Unit) {
     Row(Modifier.padding(start = 20.dp, end = 16.dp, top = 20.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
@@ -175,6 +177,12 @@ private fun Header(onSettings: () -> Unit, onCalendar: () -> Unit) {
             )
             Text("For You", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
         }
+        Icon(
+            Icons.Rounded.Hub, contentDescription = "Graph",
+            modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .clickable(onClick = onGraph).padding(12.dp).size(24.dp),
+        )
+        Spacer(Modifier.width(8.dp))
         Icon(
             Icons.Rounded.DateRange, contentDescription = "Calendar",
             modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh)
