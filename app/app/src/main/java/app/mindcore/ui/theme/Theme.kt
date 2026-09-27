@@ -28,12 +28,34 @@ internal val LotusDark = darkColorScheme(
     outline = Color(0xFF978A8E), outlineVariant = Color(0xFF4D4346),
 )
 
+// Warm paper, ink text, one lotus accent; neutrals tinted a touch toward the pink.
 internal val LotusLight = lightColorScheme(
-    primary = Color(0xFFA23A5A), onPrimary = Color.White,
+    primary = Color(0xFFA23A5A), onPrimary = Color(0xFFFFFBFA),
     primaryContainer = Color(0xFFFFD9E1), onPrimaryContainer = Color(0xFF3E0619),
-    secondary = Color(0xFF8C4F2A), tertiary = Color(0xFF5B55A8),
-    background = Color(0xFFFFF8F8), surface = Color(0xFFFFF8F8), onSurface = Color(0xFF221A1C),
-    surfaceContainerHigh = Color(0xFFF6E9EB), surfaceContainerHighest = Color(0xFFF0E3E5),
+    secondary = Color(0xFF8C4F2A), onSecondary = Color(0xFFFFFBFA),
+    secondaryContainer = Color(0xFFFFDCC7), onSecondaryContainer = Color(0xFF331200),
+    tertiary = Color(0xFF5B55A8), onTertiary = Color(0xFFFFFBFA),
+    tertiaryContainer = Color(0xFFE3DFFF), onTertiaryContainer = Color(0xFF161060),
+    background = Color(0xFFFBF7F4), onBackground = Color(0xFF1F1A1C),
+    surface = Color(0xFFFBF7F4), onSurface = Color(0xFF1F1A1C),
+    surfaceVariant = Color(0xFFF1E6E7), onSurfaceVariant = Color(0xFF524346),
+    surfaceContainerLowest = Color(0xFFFFFFFF), surfaceContainerLow = Color(0xFFF7F1EE),
+    surfaceContainer = Color(0xFFF3ECE9), surfaceContainerHigh = Color(0xFFEDE5E2),
+    surfaceContainerHighest = Color(0xFFE6DEDB),
+    outline = Color(0xFF857376), outlineVariant = Color(0xFFD8C2C5),
+    inverseSurface = Color(0xFF1F1A1C), inverseOnSurface = Color(0xFFF7EEEF), inversePrimary = Color(0xFFF5A9BE),
+    error = Color(0xFFBA1A1A),
+)
+
+/** Pastel card colors (from the note-app reference). [light] on paper, [dark] on the dark theme; text uses [ink]. */
+data class Pastel(val light: Color, val dark: Color, val inkLight: Color, val inkDark: Color)
+
+val Pastels = listOf(
+    Pastel(Color(0xFFDCEBCB), Color(0xFF2F3B27), Color(0xFF1F2A16), Color(0xFFDCEBCB)), // sage
+    Pastel(Color(0xFFFBDCE6), Color(0xFF45252F), Color(0xFF3E0619), Color(0xFFFBDCE6)), // blush
+    Pastel(Color(0xFFFCE3CF), Color(0xFF45301F), Color(0xFF331200), Color(0xFFFCE3CF)), // peach
+    Pastel(Color(0xFFE4E0FB), Color(0xFF2E2A4A), Color(0xFF161060), Color(0xFFE4E0FB)), // lavender
+    Pastel(Color(0xFFD7ECF6), Color(0xFF223540), Color(0xFF0B2530), Color(0xFFD7ECF6)), // sky
 )
 
 private val MonoDark = darkColorScheme(
