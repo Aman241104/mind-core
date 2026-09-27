@@ -26,6 +26,8 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            // Same key as the debug builds already on the phone, so in-app updates install over them.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     buildFeatures {
@@ -42,6 +44,7 @@ dependencies {
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
     implementation(libs.compose.icons.core)
+    implementation(libs.compose.icons.extended)
     implementation(libs.backdrop)
     implementation(libs.kyant.shapes)
     implementation(libs.datastore.preferences)

@@ -42,6 +42,10 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import app.mindcore.MainActivity
+import app.mindcore.R
+import androidx.glance.ColorFilter
+import androidx.glance.Image
+import androidx.glance.ImageProvider
 import app.mindcore.Nav
 import app.mindcore.ShareActivity
 import app.mindcore.data.Api
@@ -93,7 +97,7 @@ private fun KindDot(kind: String) {
     Box(GlanceModifier.size(8.dp).cornerRadius(4.dp).background(ColorProvider(kindColors[kind] ?: Color(0xFF978A8E)))) {}
 }
 
-// ---------- 1. Quick capture: ＋ Save · 🎙 Voice · 📋 Paste ----------
+// ---------- 1. Quick capture: Save · Voice · Paste ----------
 
 class CaptureWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(setOf(DpSize(180.dp, 60.dp), DpSize(280.dp, 60.dp)))
@@ -106,28 +110,31 @@ class CaptureWidget : GlanceAppWidget() {
                     Text("mind-core", style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 16.sp, fontWeight = FontWeight.Bold),
                         modifier = GlanceModifier.defaultWeight().clickable(actionStartActivity(openApp(context))))
                 }
-                Chip("＋ Save", primary = true, action = capture(context))
+                Chip(R.drawable.ic_sym_add, "Save", primary = true, action = capture(context))
                 Spacer(GlanceModifier.width(6.dp))
-                Chip("🎙", primary = false, action = capture(context, ShareActivity.MODE_VOICE))
+                Chip(R.drawable.ic_sym_mic, null, primary = false, action = capture(context, ShareActivity.MODE_VOICE), description = "Voice note")
                 Spacer(GlanceModifier.width(6.dp))
-                Chip("📋", primary = false, action = capture(context, ShareActivity.MODE_PASTE))
+                Chip(R.drawable.ic_sym_content_paste, null, primary = false, action = capture(context, ShareActivity.MODE_PASTE), description = "Paste")
             }
         }
     }
 }
 
 @Composable
-private fun Chip(label: String, primary: Boolean, action: Intent) {
-    Box(
+private fun Chip(icon: Int, label: String?, primary: Boolean, action: Intent, description: String? = label) {
+    val fg = if (primary) GlanceTheme.colors.onPrimary else GlanceTheme.colors.onSurface
+    Row(
         GlanceModifier.height(44.dp).cornerRadius(22.dp)
             .background(if (primary) GlanceTheme.colors.primary else GlanceTheme.colors.surfaceVariant)
-            .padding(horizontal = 16.dp).clickable(actionStartActivity(action)),
-        contentAlignment = Alignment.Center,
+            .padding(horizontal = if (label == null) 12.dp else 16.dp).clickable(actionStartActivity(action)),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, style = TextStyle(
-            color = if (primary) GlanceTheme.colors.onPrimary else GlanceTheme.colors.onSurface,
-            fontSize = 15.sp, fontWeight = FontWeight.Bold,
-        ))
+        Image(ImageProvider(icon), contentDescription = description, colorFilter = ColorFilter.tint(fg),
+            modifier = GlanceModifier.size(20.dp))
+        if (label != null) {
+            Spacer(GlanceModifier.width(6.dp))
+            Text(label, style = TextStyle(color = fg, fontSize = 15.sp, fontWeight = FontWeight.Bold))
+        }
     }
 }
 
@@ -183,7 +190,7 @@ class FreshWidget : GlanceAppWidget() {
             Panel {
                 Column(GlanceModifier.fillMaxSize()) {
                     val status = buildList {
-                        add(if (snap.laptopOnline) "● laptop online" else "○ laptop offline")
+                        add(if (snap.laptopOnline) "Laptop online" else "Laptop offline")
                         if (snap.processing > 0) add("${snap.processing} processing")
                     }.joinToString(" · ")
                     Title("Fresh finds", status)
@@ -198,7 +205,11 @@ class FreshWidget : GlanceAppWidget() {
                                 Spacer(GlanceModifier.width(10.dp))
                                 Text(r.name, maxLines = 1, style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 14.sp),
                                     modifier = GlanceModifier.defaultWeight())
-                                if (r.detail.startsWith("★")) Text(r.detail, style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp))
+                                if (r.detail.startsWith("stars:")) {
+                                    Image(ImageProvider(R.drawable.ic_sym_star), contentDescription = "stars",
+                                        colorFilter = ColorFilter.tint(GlanceTheme.colors.onSurfaceVariant), modifier = GlanceModifier.size(13.dp))
+                                    Text(r.detail.removePrefix("stars:"), style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp))
+                                }
                             }
                         }
                     }

@@ -215,7 +215,7 @@ private fun Preview(style: GlassStyle, dark: Boolean) {
             )
             Column(Modifier.padding(20.dp).graphicsLayer { translationX = -drift.dp.toPx() / 2 }) {
                 Text("For You", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Text("Archify · ★72k · MIT", color = Color.White.copy(0.85f), style = MaterialTheme.typography.titleMedium)
+                Text("Archify · 72k stars · MIT", color = Color.White.copy(0.85f), style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(18.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     listOf(Color(0xFFF5A9BE), Color(0xFFBDB6F7), Color(0xFF8FD3FF), Color(0xFFF2BFA0)).forEach {

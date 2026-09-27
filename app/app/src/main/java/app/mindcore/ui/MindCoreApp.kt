@@ -98,7 +98,7 @@ fun MindCoreApp() {
         var showSettings by rememberSaveable { mutableStateOf(false) }
         var showGlass by rememberSaveable { mutableStateOf(false) }
         var openItem by rememberSaveable { mutableStateOf<String?>(null) }
-        var libraryKind by rememberSaveable { mutableStateOf<String?>(null) }
+        val libraryQuery = remember { LibraryQuery() }
         var showCapture by rememberSaveable { mutableStateOf(false) }
         var showCalendar by rememberSaveable { mutableStateOf(false) }
         val askState = remember { AskState() }
@@ -142,10 +142,10 @@ fun MindCoreApp() {
                             updates,
                             onSettings = { showSettings = true },
                             onOpen = { id -> openItem = id },
-                            onOpenKind = { k -> libraryKind = k; tab = 1 },
+                            onOpenKind = { k -> libraryQuery.clear(); libraryQuery.kinds = setOfNotNull(k); tab = 1 },
                             onCalendar = { showCalendar = true },
                         )
-                        tab == 1 -> LibraryScreen(library, libraryKind, { k -> libraryKind = k }, onOpen = { id -> openItem = id })
+                        tab == 1 -> LibraryScreen(library, libraryQuery, onOpen = { id -> openItem = id })
                         else -> AskScreen(askState, library.api, settings.research, onOpenItem = { id -> openItem = id })
                     }
                 }
@@ -214,28 +214,6 @@ private fun LazyListScope.problems(library: Library) {
         MessageCard("Not connected yet", "Pair this phone from the laptop with `mindcore pair`. It sends the server address and key over adb.")
     }
     library.error?.let { message -> item { MessageCard("Couldn't reach the server", message) } }
-}
-
-@Composable
-private fun LibraryScreen(library: Library, kind: String?, onKind: (String?) -> Unit, onOpen: (String) -> Unit) {
-    val counts = library.items.groupingBy { it.kind }.eachCount()
-    val shown = library.items.filter { kind == null || it.kind == kind }.sortedBy { it.name.lowercase() }
-    Refreshable(library) {
-        item { Header("Library", "${library.items.size} items, A–Z") }
-        problems(library)
-        item {
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = kind == null, onClick = { onKind(null) }, label = { Text("All") })
-                kindLabels.filterKeys { counts.containsKey(it) }.forEach { (k, label) ->
-                    FilterChip(
-                        selected = kind == k, onClick = { onKind(if (kind == k) null else k) },
-                        label = { Text("$label ${counts[k]}") },
-                    )
-                }
-            }
-        }
-        items(shown, key = { it.id }) { item -> ItemCard(item) { onOpen(item.id) } }
-    }
 }
 
 @Composable

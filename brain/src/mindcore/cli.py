@@ -123,11 +123,12 @@ def cmd_release(args: argparse.Namespace) -> None:
     env = dict(os.environ, JAVA_HOME=str(Path.home() / ".local/share/jdk/jdk-21.0.12.1+1"),
                ANDROID_HOME=str(Path.home() / "Android/Sdk"))
     print(f"building {name} ({code})…")
-    r = subprocess.run(["./gradlew", "-q", "assembleDebug"], cwd=app, env=env, capture_output=True, text=True)
+    # Release build: minified (~3 MB instead of ~22 MB), signed with the same key as the debug builds.
+    r = subprocess.run(["./gradlew", "-q", "assembleRelease"], cwd=app, env=env, capture_output=True, text=True)
     if r.returncode != 0:
         props.write_text(f"versionCode={v['versionCode']}\nversionName={v['versionName']}\n")  # undo the bump
         raise SystemExit("build failed:\n" + (r.stdout + r.stderr)[-2000:])
-    apk = app / "app/build/outputs/apk/debug/app-debug.apk"
+    apk = app / "app/build/outputs/apk/release/app-release.apk"
     api = Api()
     resp = api.http.post("/v1/brain/app", content=apk.read_bytes(), timeout=300, headers={
         "content-type": "application/vnd.android.package-archive",

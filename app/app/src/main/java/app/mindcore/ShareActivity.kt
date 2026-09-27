@@ -56,8 +56,8 @@ class ShareActivity : ComponentActivity() {
     companion object {
         const val ACTION_CAPTURE = "app.mindcore.CAPTURE"
         const val EXTRA_MODE = "app.mindcore.MODE"
-        const val MODE_VOICE = "voice" // start recording right away (the widget's 🎙)
-        const val MODE_PASTE = "paste" // paste what you copied (the widget's 📋)
+        const val MODE_VOICE = "voice" // start recording right away (the widget's mic button)
+        const val MODE_PASTE = "paste" // paste what you copied (the widget's paste button)
     }
 
     private fun captureFrom(intent: Intent): Capture {

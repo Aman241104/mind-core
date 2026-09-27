@@ -23,7 +23,7 @@ export async function transcribe(env: Env, url: string): Promise<string> {
   return (out.text ?? "").trim();
 }
 
-/** "🎙 27 Sep: …" lines are appended to the item's note, so several voice notes can pile up. */
+/** "Voice note, 27 Sep: …" lines are appended to the item's note, so several voice notes can pile up. */
 export async function addItemVoice(id: string, req: Request, env: Env): Promise<Response> {
   const body = (await req.json()) as { voice_url?: string };
   if (!body.voice_url || !isOwnAudio(env, body.voice_url)) return Response.json({ error: "voice_url must be your Cloudinary audio" }, { status: 400 });
@@ -32,7 +32,7 @@ export async function addItemVoice(id: string, req: Request, env: Env): Promise<
   const day = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
   await env.DB.prepare(
     `UPDATE items SET user_note = trim(COALESCE(user_note, '') || char(10) || ?), updated_at = datetime('now') WHERE id = ?`,
-  ).bind(`🎙 ${day}: ${text}`, id).run();
+  ).bind(`Voice note, ${day}: ${text}`, id).run();
   // "…the deadline is 5 October" in a voice note sets the item's deadline.
   const deadline = await findDeadline(env, text).catch(() => null);
   if (deadline) await setDeadline(env, id, deadline, "voice");

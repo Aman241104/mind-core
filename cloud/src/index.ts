@@ -119,7 +119,7 @@ async function ingest(env: Env, saves: SaveIn[]): Promise<Counts> {
     if (s.voice_url) {
       if (!isOwnAudio(env, s.voice_url)) { counts.invalid++; continue; }
       const heard = await transcribe(env, s.voice_url).catch(() => "");
-      if (heard) s.note = [s.note, `🎙 ${heard}`].filter(Boolean).join("\n");
+      if (heard) s.note = [s.note, `Voice note: ${heard}`].filter(Boolean).join("\n");
       if (!s.url && !s.image_url && !s.text) s.text = heard || undefined;
     }
     let row: { id: string; url: string | null; host: string | null; kind: string; shelf: string; mine: boolean; note: string | null };
@@ -266,13 +266,14 @@ async function getItem(id: string, env: Env): Promise<Response> {
 }
 
 async function patchItem(id: string, req: Request, env: Env): Promise<Response> {
-  const body = (await req.json()) as { status?: string; user_note?: string };
+  const body = (await req.json()) as { status?: string; user_note?: string; favorite?: boolean };
   const allowed = new Set(["new", "want", "trying", "done", "skip"]);
   if (body.status && !allowed.has(body.status)) return bad("bad status");
   await env.DB.prepare(
-    `UPDATE items SET status = COALESCE(?, status), user_note = COALESCE(?, user_note), updated_at = datetime('now')
+    `UPDATE items SET status = COALESCE(?, status), user_note = COALESCE(?, user_note),
+       favorite = COALESCE(?, favorite), updated_at = datetime('now')
      WHERE id = ?`,
-  ).bind(body.status ?? null, body.user_note ?? null, id).run();
+  ).bind(body.status ?? null, body.user_note ?? null, body.favorite == null ? null : body.favorite ? 1 : 0, id).run();
   return getItem(id, env);
 }
 

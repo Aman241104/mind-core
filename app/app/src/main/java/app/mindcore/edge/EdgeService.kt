@@ -5,7 +5,6 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.InsetDrawable
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -13,7 +12,14 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
+import android.graphics.Typeface
+import android.view.animation.AccelerateInterpolator
+import android.view.animation.OvershootInterpolator
+import app.mindcore.R
 import app.mindcore.ShareActivity
 import app.mindcore.settings.AppSettings
 import app.mindcore.settings.SettingsStore
@@ -57,11 +63,17 @@ class EdgeService : AccessibilityService() {
     override fun onDestroy() {
         scope.cancel()
         handle?.let { runCatching { wm.removeView(it) } }
-        hidePill()
+        hidePill(animated = false)
         super.onDestroy()
     }
 
     override fun onInterrupt() = Unit
+
+    // Rotation changes the screen size: re-place the handle so it stays on the edge and on screen.
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::wm.isInitialized) showHandle()
+    }
 
     // ---------- noticing a copy ----------
 
@@ -82,14 +94,38 @@ class EdgeService : AccessibilityService() {
         val now = System.currentTimeMillis()
         if (now - lastPillAt < 3000) return // one pill per copy, even when several events fire
         lastPillAt = now
-        hidePill()
-        val view = TextView(this).apply {
-            text = if (fromInstagram) "Save this to mind-core?" else "Save to mind-core?"
-            setTextColor(0xFF4A1426.toInt())
-            textSize = 15f
-            setPadding(dp(20), dp(12), dp(20), dp(12))
-            background = GradientDrawable().apply { cornerRadius = dp(24).toFloat(); setColor(0xFFF5A9BE.toInt()) }
-            elevation = dp(6).toFloat()
+        hidePill(animated = false)
+        // Dark glass capsule: translucent tint, a light rim, Material "bookmark add" icon, two lines of text.
+        val view = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(8), dp(20), dp(8))
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xE62A2327.toInt(), 0xF0161214.toInt())).apply {
+                cornerRadius = dp(30).toFloat()
+                setStroke(dp(1), 0x40FFFFFF)
+            }
+            elevation = dp(10).toFloat()
+            addView(ImageView(context).apply {
+                setImageResource(R.drawable.ic_sym_bookmark_add)
+                setColorFilter(0xFF4A1426.toInt())
+                background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xFFF5A9BE.toInt()) }
+                setPadding(dp(9), dp(9), dp(9), dp(9))
+            }, LinearLayout.LayoutParams(dp(42), dp(42)))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), 0, 0, 0)
+                addView(TextView(context).apply {
+                    text = "Save to mind-core"
+                    setTextColor(0xFFFFFFFF.toInt())
+                    textSize = 15f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                })
+                addView(TextView(context).apply {
+                    text = if (fromInstagram) "The Instagram link you copied" else "What you just copied"
+                    setTextColor(0xB3FFFFFF.toInt())
+                    textSize = 12f
+                })
+            })
             setOnClickListener {
                 hidePill()
                 openCapture(ShareActivity.MODE_PASTE)
@@ -99,13 +135,25 @@ class EdgeService : AccessibilityService() {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
             y = dp(150)
         }
-        runCatching { wm.addView(view, lp) }.onSuccess { pill = view }
+        runCatching { wm.addView(view, lp) }.onSuccess {
+            pill = view
+            // Springs up into place.
+            view.alpha = 0f
+            view.scaleX = 0.86f
+            view.scaleY = 0.86f
+            view.translationY = dp(28).toFloat()
+            view.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f)
+                .setDuration(420).setInterpolator(OvershootInterpolator(1.4f)).start()
+        }
         main.postDelayed({ if (pill === view) hidePill() }, 6000)
     }
 
-    private fun hidePill() {
-        pill?.let { runCatching { wm.removeView(it) } }
+    private fun hidePill(animated: Boolean = true) {
+        val view = pill ?: return
         pill = null
+        if (!animated) { runCatching { wm.removeView(view) }; return }
+        view.animate().alpha(0f).scaleX(0.92f).scaleY(0.92f).translationY(dp(16).toFloat()).setDuration(200)
+            .setInterpolator(AccelerateInterpolator()).withEndAction { runCatching { wm.removeView(view) } }.start()
     }
 
     // ---------- edge handle ----------
@@ -114,31 +162,46 @@ class EdgeService : AccessibilityService() {
     private fun showHandle() {
         handle?.let { runCatching { wm.removeView(it) } }
         val right = settings.edgeRight
-        val view = View(this).apply {
+        // A soft glass strip inside a 26 dp touch area: easy to grab, barely there until you touch it.
+        val strip = View(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0x66FFFFFF, 0x99F5A9BE.toInt(), 0x66FFFFFF)).apply { cornerRadius = dp(3).toFloat() }
+            alpha = 0.7f
+        }
+        val view = FrameLayout(this).apply {
             contentDescription = "Open mind-core drawer"
-            // A slim 5 dp lotus strip inside a 24 dp touch area: easy to grab, barely visible.
-            background = InsetDrawable(
-                GradientDrawable().apply { cornerRadius = dp(3).toFloat(); setColor(0x99F5A9BE.toInt()) },
-                if (right) dp(17) else dp(2), dp(6), if (right) dp(2) else dp(17), dp(6),
-            )
+            addView(strip, FrameLayout.LayoutParams(dp(5), FrameLayout.LayoutParams.MATCH_PARENT).apply {
+                gravity = if (right) Gravity.END else Gravity.START
+                if (right) marginEnd = dp(3) else marginStart = dp(3)
+                topMargin = dp(8); bottomMargin = dp(8)
+            })
         }
         var downX = 0f
         var downY = 0f
         view.setOnTouchListener { _, e ->
             when (e.action) {
-                MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY }
-                MotionEvent.ACTION_UP -> {
-                    val dx = e.rawX - downX
-                    val inward = if (right) -dx else dx
-                    val tap = abs(dx) < dp(8) && abs(e.rawY - downY) < dp(8)
-                    if (inward > dp(20) || tap) openDrawer()
+                MotionEvent.ACTION_DOWN -> {
+                    downX = e.rawX; downY = e.rawY
+                    strip.animate().alpha(1f).scaleX(1.8f).setDuration(160).setInterpolator(OvershootInterpolator()).start()
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    strip.animate().alpha(0.7f).scaleX(1f).setDuration(220).start()
+                    if (e.action == MotionEvent.ACTION_UP) {
+                        val dx = e.rawX - downX
+                        val inward = if (right) -dx else dx
+                        val tap = abs(dx) < dp(8) && abs(e.rawY - downY) < dp(8)
+                        if (inward > dp(20) || tap) openDrawer()
+                    }
                 }
             }
             true
         }
-        val lp = overlayParams(dp(24), dp(120)).apply {
+        // Current window size (not the portrait one), and never let the handle hang off the bottom.
+        val screenH = wm.currentWindowMetrics.bounds.height()
+        val handleH = dp(if (screenH < dp(500)) 96 else 128) // shorter in landscape
+        val lp = overlayParams(dp(26), handleH).apply {
             gravity = Gravity.TOP or if (right) Gravity.END else Gravity.START
-            y = (resources.displayMetrics.heightPixels * settings.edgePosition).toInt()
+            y = (screenH * settings.edgePosition).toInt().coerceIn(dp(24), (screenH - handleH - dp(24)).coerceAtLeast(dp(24)))
         }
         runCatching { wm.addView(view, lp) }.onSuccess { handle = view }
     }

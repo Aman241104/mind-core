@@ -19,6 +19,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarOutline
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -69,13 +74,13 @@ fun compact(n: Int): String = when {
 
 fun Verification.summary(): String = listOfNotNull(
     repo,
-    stars?.let { "★${compact(it)}" },
+    stars?.let { "${compact(it)} stars" },
     license?.takeIf { it != "NOASSERTION" },
     if (archived) "archived" else null,
 ).joinToString(" · ")
 
 @Composable
-fun ItemCard(item: ApiItem, onClick: () -> Unit) {
+fun ItemCard(item: ApiItem, onFavorite: ((ApiItem) -> Unit)? = null, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Surface(
         shape = RoundedCornerShape(28.dp),
@@ -92,6 +97,8 @@ fun ItemCard(item: ApiItem, onClick: () -> Unit) {
                     Spacer(Modifier.width(8.dp))
                     Pill(item.status.replaceFirstChar { it.uppercase() }, scheme.primary)
                 }
+                Spacer(Modifier.weight(1f))
+                if (onFavorite != null) FavoriteButton(item.favorite) { onFavorite(item) }
             }
             Spacer(Modifier.height(2.dp))
             Text(item.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold,
@@ -104,6 +111,23 @@ fun ItemCard(item: ApiItem, onClick: () -> Unit) {
             if (detail.isNotBlank()) Text(detail, style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
         }
     }
+}
+
+/** Star toggle; springs a little when you tap it. */
+@Composable
+fun FavoriteButton(on: Boolean, onToggle: () -> Unit) {
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        if (on) 1f else 0.9f,
+        androidx.compose.animation.core.spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioHighBouncy, stiffness = 600f),
+        label = "fav",
+    )
+    androidx.compose.material3.Icon(
+        if (on) androidx.compose.material.icons.Icons.Rounded.Star else androidx.compose.material.icons.Icons.Rounded.StarOutline,
+        contentDescription = if (on) "Remove from favorites" else "Add to favorites",
+        tint = if (on) Color(0xFFFFC66D) else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale }.clip(androidx.compose.foundation.shape.CircleShape)
+            .clickable(onClick = onToggle).padding(6.dp).size(24.dp),
+    )
 }
 
 @Composable

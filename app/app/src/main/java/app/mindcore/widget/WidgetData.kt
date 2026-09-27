@@ -61,7 +61,8 @@ object WidgetData {
     /** Build the snapshot from data the app already has, save it, and redraw every widget. */
     suspend fun write(context: Context, items: List<ApiItem>, upcoming: List<Upcoming>, status: Status?) {
         val newest = items.sortedByDescending { it.updatedAt }
-        fun detail(it: ApiItem) = it.verification?.stars?.let { s -> "★" + compactNumber(s) } ?: it.oneLine.orEmpty()
+        // "stars:72k" is drawn as a star icon + number by the widget; otherwise the one-liner.
+        fun detail(it: ApiItem) = it.verification?.stars?.let { s -> "stars:" + compactNumber(s) } ?: it.oneLine.orEmpty()
         val weekAgo = LocalDate.now().minusDays(7).toString()
         val o = JSONObject()
             .put("fresh", JSONArray(newest.take(8).map { JSONObject().put("id", it.id).put("name", it.name).put("kind", it.kind).put("detail", detail(it)) }))

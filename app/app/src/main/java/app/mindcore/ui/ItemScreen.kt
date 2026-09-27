@@ -99,6 +99,12 @@ fun ItemScreen(id: String, api: Api, onBack: () -> Unit, onOpenItem: (String) ->
                     Pill(kindLabels[it.kind] ?: it.kind, kindColor(it.kind))
                     Spacer(Modifier.width(8.dp))
                     Pill(trustLabel(it.trust), trustColor(it.trust))
+                    Spacer(Modifier.weight(1f))
+                    FavoriteButton(it.favorite) {
+                        scope.launch {
+                            runCatching { api.setFavorite(it.id, !it.favorite) }.onSuccess { d -> detail = d; onChanged(d.item) }
+                        }
+                    }
                 }
                 Text(it.name, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                 it.oneLine?.let { line -> Text(line, style = MaterialTheme.typography.bodyLarge) }

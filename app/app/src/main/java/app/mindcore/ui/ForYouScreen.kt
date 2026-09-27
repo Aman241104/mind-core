@@ -271,8 +271,11 @@ private fun FreshTile(item: ApiItem, onClick: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(8.dp).background(trustColor(item.trust), CircleShape))
             Spacer(Modifier.width(6.dp))
+            val stars = item.verification?.stars
+            if (stars != null) Icon(Icons.Rounded.Star, contentDescription = "stars", tint = scheme.onSurfaceVariant,
+                modifier = Modifier.size(14.dp).padding(end = 2.dp))
             Text(
-                item.verification?.stars?.let { "★${compact(it)}" } ?: trustLabel(item.trust),
+                stars?.let { compact(it) } ?: trustLabel(item.trust),
                 style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant,
             )
         }
