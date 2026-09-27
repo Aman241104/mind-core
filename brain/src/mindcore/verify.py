@@ -47,11 +47,15 @@ def find_repo(name: str) -> dict | None:
     if len(target) < 3:
         return None
     hits = _gh("search", "repos", name, "--sort", "stars", "--limit", "8", "--json", "fullName,name")
-    for hit in hits or []:
-        repo_name = _squash(hit["name"])
-        if repo_name == target or (len(target) >= 6 and (target in repo_name or repo_name in target)):
-            owner, repo = hit["fullName"].split("/")
-            return repo_facts(owner, repo)
+    for exact in (True, False):
+        for hit in hits or []:
+            repo_name = _squash(hit["name"])
+            if (repo_name == target) if exact else (len(target) >= 6 and (target in repo_name or repo_name in target)):
+                owner, repo = hit["fullName"].split("/")
+                facts = repo_facts(owner, repo)
+                if facts:
+                    facts["match"] = "exact name" if exact else "partial name"
+                return facts
     return None
 
 
@@ -74,6 +78,10 @@ def verify_item(item: dict) -> dict:
     item["url"] = f"https://github.com/{facts['repo']}"
     item["canonical_key"] = f"github:{facts['repo'].lower()}"
     item["verification"] = facts
-    # "verified" = the real repo was found and is alive. The reel's claims are fact-checked separately (M3).
-    item["trust"] = "dead" if facts["archived"] else "verified"
+    # "verified" = the real repo was found (a GitHub link, or an exact name match) and is alive.
+    # A partial name match might be a different project, so it stays "check". Claims are fact-checked in M3.
+    if facts["archived"]:
+        item["trust"] = "dead"
+    else:
+        item["trust"] = "check" if facts.get("match") == "partial name" else "verified"
     return item

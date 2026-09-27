@@ -81,6 +81,7 @@ fun MindCoreApp() {
         var showSettings by rememberSaveable { mutableStateOf(false) }
         var showGlass by rememberSaveable { mutableStateOf(false) }
         var openItem by rememberSaveable { mutableStateOf<String?>(null) }
+        var libraryKind by rememberSaveable { mutableStateOf<String?>(null) }
         val backdrop = rememberLayerBackdrop()
         val haptics = LocalHapticFeedback.current
         BackHandler(enabled = showSettings || showGlass || openItem != null) {
@@ -111,8 +112,13 @@ fun MindCoreApp() {
                             onOpenItem = { id -> openItem = id },
                             onChanged = library::replace,
                         )
-                        tab == 0 -> ForYou(library, onSettings = { showSettings = true }, onOpen = { id -> openItem = id })
-                        tab == 1 -> LibraryScreen(library, onOpen = { id -> openItem = id })
+                        tab == 0 -> ForYouScreen(
+                            library,
+                            onSettings = { showSettings = true },
+                            onOpen = { id -> openItem = id },
+                            onOpenKind = { k -> libraryKind = k; tab = 1 },
+                        )
+                        tab == 1 -> LibraryScreen(library, libraryKind, { k -> libraryKind = k }, onOpen = { id -> openItem = id })
                         else -> Placeholder("Ask", "Chat with everything you saved comes in M3.")
                     }
                 }
@@ -171,46 +177,7 @@ private fun LazyListScope.problems(library: Library) {
 }
 
 @Composable
-private fun ForYou(library: Library, onSettings: () -> Unit, onOpen: (String) -> Unit) {
-    val status = library.status
-    Refreshable(library) {
-        item {
-            Header("For You", "${library.items.size} finds from your saves") {
-                Icon(
-                    Icons.Rounded.Settings, contentDescription = "Settings",
-                    modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .clickable(onClick = onSettings).padding(12.dp).size(24.dp),
-                )
-            }
-        }
-        problems(library)
-        if (status != null) item {
-            val waiting = (status.jobs["pending"] ?: 0) + (status.jobs["leased"] ?: 0)
-            val failed = status.jobs["failed"] ?: 0
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-                Box(
-                    Modifier.size(10.dp).background(
-                        if (status.laptopOnline) Color(0xFF7BD88F) else MaterialTheme.colorScheme.outline, CircleShape,
-                    ),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    listOfNotNull(
-                        if (status.laptopOnline) "Laptop online" else "Laptop offline",
-                        if (waiting > 0) "$waiting saves being processed" else "all caught up",
-                        if (failed > 0) "$failed couldn't be opened" else null,
-                    ).joinToString(" · "),
-                    style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        items(library.items.take(20), key = { it.id }) { item -> ItemCard(item) { onOpen(item.id) } }
-    }
-}
-
-@Composable
-private fun LibraryScreen(library: Library, onOpen: (String) -> Unit) {
-    var kind by rememberSaveable { mutableStateOf<String?>(null) }
+private fun LibraryScreen(library: Library, kind: String?, onKind: (String?) -> Unit, onOpen: (String) -> Unit) {
     val counts = library.items.groupingBy { it.kind }.eachCount()
     val shown = library.items.filter { kind == null || it.kind == kind }.sortedBy { it.name.lowercase() }
     Refreshable(library) {
@@ -218,10 +185,10 @@ private fun LibraryScreen(library: Library, onOpen: (String) -> Unit) {
         problems(library)
         item {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = kind == null, onClick = { kind = null }, label = { Text("All") })
+                FilterChip(selected = kind == null, onClick = { onKind(null) }, label = { Text("All") })
                 kindLabels.filterKeys { counts.containsKey(it) }.forEach { (k, label) ->
                     FilterChip(
-                        selected = kind == k, onClick = { kind = if (kind == k) null else k },
+                        selected = kind == k, onClick = { onKind(if (kind == k) null else k) },
                         label = { Text("$label ${counts[k]}") },
                     )
                 }

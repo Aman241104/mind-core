@@ -97,11 +97,11 @@ fun ItemScreen(id: String, api: Api, onBack: () -> Unit, onOpenItem: (String) ->
         it.verification?.let { v ->
             item {
                 Block("Checked on GitHub") {
-                    Fact("Repo", v.repo ?: "—")
+                    Fact("Repo", v.repo ?: "not found")
                     v.stars?.let { s -> Fact("Stars", compact(s)) }
                     Fact("License", v.license?.takeIf { l -> l != "NOASSERTION" } ?: "none / custom")
                     v.pushedAt?.let { p -> Fact("Last update", p.take(10)) }
-                    if (v.archived) Fact("Status", "Archived — no longer maintained")
+                    if (v.archived) Fact("Status", "Archived, no longer maintained")
                 }
             }
         }
