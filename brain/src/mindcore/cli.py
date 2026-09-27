@@ -52,7 +52,7 @@ def cmd_push(args: argparse.Namespace) -> None:
 def cmd_brain(args: argparse.Namespace) -> None:
     from .brain import run
 
-    run(once=args.once, batch=args.batch)
+    run(once=args.once, batch=args.batch, max_batches=args.batches)
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -74,6 +74,7 @@ def main() -> None:
     p = sub.add_parser("brain", help="process jobs from the API (runs until stopped)")
     p.add_argument("--once", action="store_true", help="exit when the queue is empty")
     p.add_argument("--batch", type=int, default=6, help="saves per extraction call")
+    p.add_argument("--batches", type=int, default=None, help="stop after this many batches")
     p.set_defaults(func=cmd_brain)
     p = sub.add_parser("status", help="show API status: laptop, jobs, saves, items")
     p.set_defaults(func=cmd_status)

@@ -14,7 +14,7 @@ from .whatsapp import Link
 OWN_GITHUB = {"aman241104", "mehtatechteam"}
 
 # Dropped entirely on import: not shown anywhere, not even on the Work shelf.
-SKIP = re.compile(r"astro|love.?problem|lovebackexpert|marriage|addword|adword", re.I)
+SKIP = re.compile(r"astro|love.?probl|lovebackexpert|marriage|addword|adword", re.I)
 
 LEARNING_HOSTS = {
     "instagram.com", "youtube.com", "x.com", "twitter.com", "linkedin.com", "reddit.com",

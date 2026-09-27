@@ -100,7 +100,7 @@ def process_batch(api: Api, jobs: list[dict], log=print) -> None:
         log(f"  ✓ {job['save']['url']} [{r.get('shelf', '?')}]: {names}")
 
 
-def run(once: bool = False, batch: int = 6, log=print) -> None:
+def run(once: bool = False, batch: int = 6, max_batches: int | None = None, log=print) -> None:
     api = Api()
     stop = False
 
@@ -112,7 +112,8 @@ def run(once: bool = False, batch: int = 6, log=print) -> None:
     signal.signal(signal.SIGINT, _stop)
     last_beat = 0.0
     info = json.dumps({"host": platform.node(), "engines": ["claude"], "pid": os.getpid()})
-    while not stop:
+    done_batches = 0
+    while not stop and (max_batches is None or done_batches < max_batches):
         if time.monotonic() - last_beat > HEARTBEAT_SECONDS:
             api.post("/v1/brain/heartbeat", info)
             last_beat = time.monotonic()
@@ -120,6 +121,7 @@ def run(once: bool = False, batch: int = 6, log=print) -> None:
         if jobs:
             log(f"batch of {len(jobs)}")
             process_batch(api, jobs, log)
+            done_batches += 1
             continue
         if once:
             break
@@ -128,10 +130,14 @@ def run(once: bool = False, batch: int = 6, log=print) -> None:
 
 def push_export(export: Path, only_new: bool = True) -> dict:
     """Send a WhatsApp export's links to the API (the API normalizes, sorts and de-duplicates)."""
+    from .triage import triage
     from .whatsapp import extract_links, parse_messages, read_export
 
     text, _media = read_export(export)
     links = extract_links(parse_messages(text))
+    # A skipped link means its whole message is a list of the same kind (the API only sees single links).
+    skip_msgs = {l.msg_index for l in links if triage(l).shelf == "skip"}
+    links = [l for l in links if l.msg_index not in skip_msgs]
     api = Api()
     totals: dict[str, int] = {}
     payload = [{"url": l.raw, "note": l.note, "title": l.title, "source": "whatsapp", "saved_at": l.when.isoformat()}

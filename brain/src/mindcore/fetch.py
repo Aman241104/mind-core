@@ -124,19 +124,27 @@ def fetch(save: dict) -> Content:
 
 
 def fetch_post(url: str) -> Content:
-    """Instagram photo/carousel posts: caption via yt-dlp metadata; images get OCR'd."""
+    """Instagram photo/carousel posts: caption from metadata, text read off every image.
+
+    Carousels that contain videos are handled as reels.
+    """
     with tempfile.TemporaryDirectory(prefix="mindcore-") as tmp:
         work = Path(tmp)
-        r = _yt_dlp("--write-info-json", "--skip-download", "-o", str(work / "p.%(ext)s"), url)
-        info_file = next(work.glob("*.info.json"), None)
-        if r.returncode != 0 and not info_file:
-            # Carousels of images often aren't "videos" to yt-dlp; fall back to the public page's text.
-            try:
-                return fetch_page(url)
-            except FetchError:
-                err = (r.stderr.strip().splitlines() or ["yt-dlp failed"])[-1]
-                raise FetchError(err[:300]) from None
-        info = json.loads(info_file.read_text()) if info_file else {}
-        if info.get("_type") == "playlist" or info.get("ext") in ("mp4", "webm"):
+        r = _yt_dlp("--ignore-no-formats-error", "--skip-download", "--write-info-json", "--write-thumbnail",
+                    "-o", str(work / "p_%(playlist_index|0)s.%(ext)s"), url)
+        infos = sorted(work.glob("*.info.json"))
+        if not infos:
+            err = (r.stderr.strip().splitlines() or ["yt-dlp failed"])[-1]
+            raise FetchError(err[:300], retry="empty media" not in err and "not available" not in err)
+        metas = [json.loads(f.read_text()) for f in infos]
+        if any(m.get("vcodec") not in (None, "none") and m.get("duration") for m in metas):
             return fetch_video(url)
-        return Content(caption=info.get("description") or "", creator=info.get("uploader"))
+        top = next((m for m in metas if m.get("description")), metas[0])
+        texts = []
+        for img in sorted(p for p in work.iterdir() if p.suffix in (".jpg", ".jpeg", ".png", ".webp")):
+            out = subprocess.run(["tesseract", str(img), "-", "--psm", "3"], capture_output=True, text=True, timeout=60)
+            text = re.sub(r"\s+", " ", out.stdout).strip()
+            if len(text) > 15:
+                texts.append(text)
+        return Content(caption=top.get("description") or "", screen_text="\n".join(texts),
+                       creator=top.get("uploader") or top.get("channel"))

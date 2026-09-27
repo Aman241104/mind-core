@@ -40,7 +40,7 @@ export function kindHint(url: string): string {
 // GitHub owners that are you / your team: their repos are your own work, not finds.
 const OWN_GITHUB = new Set(["aman241104", "mehtatechteam"]);
 // Dropped entirely on import: not shown anywhere, not even on the Work shelf.
-const SKIP = /astro|love.?problem|lovebackexpert|marriage|addword|adword/i;
+const SKIP = /astro|love.?probl|lovebackexpert|marriage|addword|adword/i;
 const LEARNING_HOSTS = new Set([
   "instagram.com", "youtube.com", "x.com", "twitter.com", "linkedin.com", "reddit.com",
   "medium.com", "dev.to", "huggingface.co", "arxiv.org", "coursera.org", "udemy.com",
