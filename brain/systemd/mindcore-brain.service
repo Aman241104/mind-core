@@ -1,0 +1,20 @@
+[Unit]
+Description=mind-core laptop brain: downloads, transcribes and extracts your saves
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/stash/brain
+# claude, uv/uvx and gh live here; yt-dlp runs via uvx, ffmpeg/tesseract from the system
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+ExecStart=%h/.local/bin/uv run --quiet mindcore brain
+Restart=on-failure
+RestartSec=30
+# Don't hog the laptop: Whisper and OCR run at low priority.
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=default.target
