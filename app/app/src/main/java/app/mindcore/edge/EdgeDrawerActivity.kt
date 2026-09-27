@@ -124,7 +124,7 @@ class EdgeDrawerActivity : ComponentActivity() {
         setContent {
             val store = remember { SettingsStore(applicationContext) }
             val settings by store.settings.collectAsState(initial = AppSettings())
-            MaterialTheme(colorScheme = colorSchemeFor(settings)) {
+            MaterialTheme(colorScheme = colorSchemeFor(settings), typography = app.mindcore.ui.theme.LotusTypography) {
                 Drawer(settings, right, context = this, finish = { finish() })
             }
         }

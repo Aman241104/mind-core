@@ -39,6 +39,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import app.mindcore.data.VoiceRecorder
+import app.mindcore.ui.blob.BlobState
+import app.mindcore.ui.blob.LotusBlob
 import kotlinx.coroutines.delay
 import java.io.File
 import androidx.compose.ui.graphics.SolidColor
@@ -133,6 +135,8 @@ fun VoiceButton(label: String, onRecorded: (File?) -> Unit, modifier: Modifier =
             modifier = Modifier.clip(CircleShape).clickable { recorder.discard(); kept = 0; onRecorded(null) }.padding(8.dp),
         )
     }
-    if (recording) Box(Modifier.padding(top = 6.dp).fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp))
-        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.25f + level * 0.75f)))
+    // While recording, Swan listens: it perks up and sound rings follow your voice.
+    if (recording) Box(Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.Center) {
+        LotusBlob(BlobState.Listening, size = 96.dp, level = { level }, onTap = null)
+    }
 }

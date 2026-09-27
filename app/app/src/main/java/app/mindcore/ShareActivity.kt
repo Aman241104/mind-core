@@ -41,7 +41,7 @@ class ShareActivity : ComponentActivity() {
             val capturer = remember(settings.apiToken, settings.serverUrl) {
                 if (settings.apiToken.isBlank()) null else Capturer(applicationContext, Api(settings.serverUrl, settings.apiToken))
             }
-            MaterialTheme(colorScheme = colorSchemeFor(settings)) {
+            MaterialTheme(colorScheme = colorSchemeFor(settings), typography = app.mindcore.ui.theme.LotusTypography) {
                 ModalBottomSheet(onDismissRequest = { finish() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
                     CaptureContent(
                         initial = capture, capturer = capturer, editable = quick,

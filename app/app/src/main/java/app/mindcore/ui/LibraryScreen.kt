@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -57,6 +58,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.mindcore.data.ApiItem
 import app.mindcore.data.Library
+import app.mindcore.ui.blob.BlobState
+import app.mindcore.ui.blob.LotusBlob
 import kotlinx.coroutines.launch
 
 enum class Sort(val label: String) {
@@ -204,7 +207,14 @@ fun LibraryScreen(library: Library, query: LibraryQuery, onOpen: (String) -> Uni
             }
             if (!library.paired) item { MessageCard("Not connected yet", "Pair this phone from the laptop with `mindcore pair`.") }
             if (shown.isEmpty() && library.items.isNotEmpty()) item {
-                MessageCard("Nothing matches", "Try fewer filters or a different search.")
+                Column(Modifier.padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        LotusBlob(BlobState.Idle, size = 110.dp)
+                    }
+                    Text("Nothing matches", style = MaterialTheme.typography.titleMedium)
+                    Text("Try fewer filters or a different search.", style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             items(shown, key = { it.id }) { item ->
                 ItemCard(item, onFavorite = { scope.launch { library.toggleFavorite(it) } }) { onOpen(item.id) }

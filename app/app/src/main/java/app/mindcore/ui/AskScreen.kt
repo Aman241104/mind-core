@@ -61,6 +61,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import app.mindcore.data.Api
+import app.mindcore.ui.blob.BlobState
+import app.mindcore.ui.blob.LotusBlob
 import app.mindcore.data.AskSource
 import app.mindcore.settings.Research
 import kotlinx.coroutines.delay
@@ -159,7 +161,10 @@ fun AskScreen(state: AskState, api: Api?, research: Research, onOpenItem: (Strin
             item { Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars)) }
             item {
                 Column(Modifier.padding(start = 4.dp, top = 16.dp, bottom = 4.dp)) {
-                    Text("Ask", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Ask", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        LotusBlob(if (state.busy) BlobState.Thinking else BlobState.Idle, size = 56.dp)
+                    }
                     Text("Answers come only from your saves, with sources.", style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -230,7 +235,8 @@ private fun Reply(m: ChatMessage, onOpenItem: (String) -> Unit, onResearch: (Str
         if (m.research) Text("Researched online", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary)
         if (m.pending) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                // Swan thinks while Ask reads your saves, and searches while research runs online.
+                LotusBlob(if (m.research) BlobState.Searching else BlobState.Thinking, size = 44.dp, onTap = null)
                 Text(m.text.ifBlank { "Reading your saves…" }, modifier = Modifier.padding(start = 10.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

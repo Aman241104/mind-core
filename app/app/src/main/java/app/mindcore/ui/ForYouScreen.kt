@@ -54,6 +54,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.mindcore.data.ApiItem
 import app.mindcore.data.Library
+import app.mindcore.ui.blob.BlobState
+import app.mindcore.ui.blob.LotusBlob
 import app.mindcore.update.UpdateBanner
 import app.mindcore.update.UpdateState
 import kotlinx.coroutines.launch
@@ -197,7 +199,11 @@ private fun Processing(library: Library) {
     val total = waiting + done + failed
     Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(8.dp).background(if (status.laptopOnline) Color(0xFF7BD88F) else MaterialTheme.colorScheme.outline, CircleShape))
+            // Swan shows what the laptop is doing: working through saves, asleep when it's offline.
+            LotusBlob(
+                when { !status.laptopOnline -> BlobState.Sleep; waiting > 0 -> BlobState.Orbit; else -> BlobState.Idle },
+                size = 36.dp,
+            )
             Spacer(Modifier.width(8.dp))
             Text(
                 when {

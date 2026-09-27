@@ -93,7 +93,7 @@ fun MindCoreApp() {
     }
     LaunchedEffect(updates) { updates.check() }
 
-    MaterialTheme(colorScheme = scheme) {
+    MaterialTheme(colorScheme = scheme, typography = app.mindcore.ui.theme.LotusTypography) {
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var showSettings by rememberSaveable { mutableStateOf(false) }
         var showGlass by rememberSaveable { mutableStateOf(false) }

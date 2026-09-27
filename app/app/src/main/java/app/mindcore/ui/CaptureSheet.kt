@@ -53,6 +53,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.mindcore.data.Capture
+import app.mindcore.ui.blob.BlobState
+import app.mindcore.ui.blob.LotusBlob
 import app.mindcore.data.Capturer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -157,14 +159,15 @@ fun CaptureContent(
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                     ) { Text(if (s is SaveState.Failed) "Try again" else "Save") }
                 }
-                SaveState.Saving -> Box(Modifier.fillMaxWidth().height(52.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(Modifier.size(28.dp))
+                SaveState.Saving -> Box(Modifier.fillMaxWidth().height(64.dp), contentAlignment = Alignment.Center) {
+                    LotusBlob(BlobState.Thinking, size = 60.dp, onTap = null)
                 }
                 is SaveState.Done -> {
-                    LaunchedEffect(Unit) { delay(900); onDone() }
-                    Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically,
+                    // Swan pops with sparks, then the sheet closes.
+                    LaunchedEffect(Unit) { delay(1300); onDone() }
+                    Row(Modifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center) {
-                        Icon(Icons.Rounded.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        LotusBlob(BlobState.Burst, size = 60.dp, onTap = null)
                         Spacer(Modifier.width(8.dp))
                         Text(s.message, style = MaterialTheme.typography.titleMedium)
                     }
