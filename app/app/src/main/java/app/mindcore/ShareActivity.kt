@@ -21,6 +21,9 @@ import app.mindcore.settings.AppSettings
 import app.mindcore.settings.SettingsStore
 import app.mindcore.ui.CaptureContent
 import app.mindcore.ui.theme.colorSchemeFor
+import app.mindcore.widget.WidgetData
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 /** "Share → mind-core" from any app: a sheet slides up over that app, saves, and goes away. */
 class ShareActivity : ComponentActivity() {
@@ -30,6 +33,7 @@ class ShareActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // Opened from the tile, widget or app-icon shortcut: an empty sheet with the text box and pickers.
         val quick = intent.action == ACTION_CAPTURE
+        val mode = intent.getStringExtra(EXTRA_MODE)
         val capture = if (quick) Capture() else captureFrom(intent)
         setContent {
             val store = remember { SettingsStore(applicationContext) }
@@ -39,7 +43,11 @@ class ShareActivity : ComponentActivity() {
             }
             MaterialTheme(colorScheme = colorSchemeFor(settings)) {
                 ModalBottomSheet(onDismissRequest = { finish() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-                    CaptureContent(initial = capture, capturer = capturer, editable = quick, onDone = { finish() })
+                    CaptureContent(
+                        initial = capture, capturer = capturer, editable = quick,
+                        autoVoice = mode == MODE_VOICE, autoPaste = mode == MODE_PASTE,
+                        onDone = { lifecycleScope.launch { WidgetData.sync(applicationContext) }; finish() },
+                    )
                 }
             }
         }
@@ -47,6 +55,9 @@ class ShareActivity : ComponentActivity() {
 
     companion object {
         const val ACTION_CAPTURE = "app.mindcore.CAPTURE"
+        const val EXTRA_MODE = "app.mindcore.MODE"
+        const val MODE_VOICE = "voice" // start recording right away (the widget's 🎙)
+        const val MODE_PASTE = "paste" // paste what you copied (the widget's 📋)
     }
 
     private fun captureFrom(intent: Intent): Capture {

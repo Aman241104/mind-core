@@ -61,7 +61,7 @@ private val MicIcon: ImageVector = ImageVector.Builder("Mic", 24.dp, 24.dp, 24f,
  * [onRecorded] gets the file (or null when discarded).
  */
 @Composable
-fun VoiceButton(label: String, onRecorded: (File?) -> Unit, modifier: Modifier = Modifier) {
+fun VoiceButton(label: String, onRecorded: (File?) -> Unit, modifier: Modifier = Modifier, autoStart: Boolean = false) {
     val context = LocalContext.current
     val recorder = remember { VoiceRecorder(context) }
     var recording by remember { mutableStateOf(false) }
@@ -77,6 +77,11 @@ fun VoiceButton(label: String, onRecorded: (File?) -> Unit, modifier: Modifier =
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (ok) start() else error = "mind-core needs the microphone for voice notes"
+    }
+    LaunchedEffect(autoStart) {
+        if (!autoStart) return@LaunchedEffect
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) start()
+        else permission.launch(Manifest.permission.RECORD_AUDIO)
     }
     LaunchedEffect(recording) {
         while (recording) {

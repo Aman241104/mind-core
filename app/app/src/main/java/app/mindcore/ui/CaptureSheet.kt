@@ -71,7 +71,14 @@ private sealed interface SaveState {
  * it starts empty with a text box, a Paste chip and a screenshot picker.
  */
 @Composable
-fun CaptureContent(initial: Capture, capturer: Capturer?, editable: Boolean, onDone: () -> Unit) {
+fun CaptureContent(
+    initial: Capture,
+    capturer: Capturer?,
+    editable: Boolean,
+    autoVoice: Boolean = false,
+    autoPaste: Boolean = false,
+    onDone: () -> Unit,
+) {
     var capture by remember { mutableStateOf(initial) }
     var input by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
@@ -82,6 +89,8 @@ fun CaptureContent(initial: Capture, capturer: Capturer?, editable: Boolean, onD
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris ->
         if (uris.isNotEmpty()) capture = capture.copy(images = (capture.images + uris).distinct())
     }
+    // The sheet has focus now, so reading the clipboard is allowed (Android blocks it in the background).
+    LaunchedEffect(autoPaste) { if (autoPaste) clipboardText(context)?.let { input = it } }
     // What will be saved = what arrived + whatever is typed in the box.
     val typed = Capture.fromText(input)
     val merged = capture.copy(
@@ -119,7 +128,7 @@ fun CaptureContent(initial: Capture, capturer: Capturer?, editable: Boolean, onD
             }
         }
         // Say why you saved it, a deadline, anything: it's transcribed and read with the save.
-        if (merged.chatExport == null) VoiceButton("Add a voice note", onRecorded = { voice = it })
+        if (merged.chatExport == null) VoiceButton("Add a voice note", onRecorded = { voice = it }, autoStart = autoVoice)
         if (merged.chatExport == null && !(editable && merged.links.isEmpty() && merged.images.isEmpty())) {
             OutlinedTextField(
                 value = note, onValueChange = { note = it },

@@ -15,7 +15,7 @@ import app.mindcore.settings.AppSettings
 import app.mindcore.settings.ThemeMode
 
 // Lotus palette, sampled from the app icon: pink petals, warm peach core, lavender glints.
-private val LotusDark = darkColorScheme(
+internal val LotusDark = darkColorScheme(
     primary = Color(0xFFF5A9BE), onPrimary = Color(0xFF4A1426),
     primaryContainer = Color(0xFF6B2A3D), onPrimaryContainer = Color(0xFFFFD9E1),
     secondary = Color(0xFFF2BFA0), onSecondary = Color(0xFF45240F),
@@ -28,7 +28,7 @@ private val LotusDark = darkColorScheme(
     outline = Color(0xFF978A8E), outlineVariant = Color(0xFF4D4346),
 )
 
-private val LotusLight = lightColorScheme(
+internal val LotusLight = lightColorScheme(
     primary = Color(0xFFA23A5A), onPrimary = Color.White,
     primaryContainer = Color(0xFFFFD9E1), onPrimaryContainer = Color(0xFF3E0619),
     secondary = Color(0xFF8C4F2A), tertiary = Color(0xFF5B55A8),

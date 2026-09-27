@@ -11,6 +11,7 @@ import androidx.lifecycle.lifecycleScope
 import app.mindcore.settings.DEFAULT_SERVER
 import app.mindcore.settings.SettingsStore
 import app.mindcore.ui.MindCoreApp
+import app.mindcore.widget.WidgetData
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -18,12 +19,15 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         handlePairing(intent)
+        intent?.getStringExtra(Nav.EXTRA_OPEN_ITEM)?.let { Nav.openItem.value = it }
+        WidgetData.schedule(applicationContext)
         setContent { MindCoreApp() }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handlePairing(intent)
+        intent.getStringExtra(Nav.EXTRA_OPEN_ITEM)?.let { Nav.openItem.value = it }
     }
 
     /** mindcore://pair?url=...&token=... — sent from the laptop over adb so the key is never typed. */

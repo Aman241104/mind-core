@@ -386,3 +386,19 @@ Decided: laptop brain runs as a boot service · research switch Auto/Claude/Free
 
 1. Send one real share link each from Claude, ChatGPT and Gemini (any harmless chat) for the M0 test.
 2. The WhatsApp re-export **with media** → `~/stash/data/`.
+
+---
+
+## 15. Widgets (researched 2026-09-27)
+
+What similar apps ship: Todoist has 4 widgets (quick add, task list, productivity stats, and a voice widget that opens in listening mode); Nothing Essential Space puts upcoming reminders and events first; Readwise is built around a daily review; Google Keep has a note-list widget.
+Implementation guidance (Android Glance docs + 2026 write-ups): Jetpack Glance; widgets read a cached snapshot, never the network; push `updateAll()` when data changes; WorkManager only for occasional background refresh (~30 min floor); few items, responsive sizes, theme-aware colors.
+
+| Widget | Pattern | Content |
+|---|---|---|
+| Quick capture | Todoist quick add + voice | ＋ Save · 🎙 Voice (opens recording) · 📋 Paste |
+| Coming up | Essential Space reminders | next deadlines, days left, overdue in red |
+| Fresh finds | Keep list + Todoist stats | newest items + "laptop online · N processing" |
+| Daily pick | Readwise daily review | one item per day to try, Open / Done / Skip |
+
+Data flow: app refresh / capture / 1-hourly worker → `WidgetSnapshot` (JSON in app storage) → `updateAll()` → widgets render from the snapshot.

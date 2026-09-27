@@ -45,4 +45,7 @@ dependencies {
     implementation(libs.backdrop)
     implementation(libs.kyant.shapes)
     implementation(libs.datastore.preferences)
+    implementation(libs.glance.appwidget)
+    implementation(libs.glance.material3)
+    implementation(libs.work.runtime)
 }

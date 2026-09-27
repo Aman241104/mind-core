@@ -81,7 +81,13 @@ fun MindCoreApp() {
     val library = remember(settings.serverUrl, settings.apiToken) {
         Library(if (settings.apiToken.isBlank()) null else Api(settings.serverUrl, settings.apiToken))
     }
-    LaunchedEffect(library) { library.refresh() }
+    LaunchedEffect(library) {
+        library.refresh()
+        // Keep the home-screen widgets in step with what the app just loaded.
+        if (library.error == null && library.api != null) {
+            app.mindcore.widget.WidgetData.write(context.applicationContext, library.items, library.upcoming, library.status)
+        }
+    }
     val updates = remember(settings.serverUrl, settings.apiToken) {
         UpdateState(if (settings.apiToken.isBlank()) null else Updater(context.applicationContext, settings.serverUrl, settings.apiToken))
     }
@@ -96,6 +102,9 @@ fun MindCoreApp() {
         var showCapture by rememberSaveable { mutableStateOf(false) }
         var showCalendar by rememberSaveable { mutableStateOf(false) }
         val askState = remember { AskState() }
+        // A widget tap can ask to open an item.
+        val requested by app.mindcore.Nav.openItem.collectAsState()
+        LaunchedEffect(requested) { requested?.let { openItem = it; app.mindcore.Nav.openItem.value = null } }
         val backdrop = rememberLayerBackdrop()
         val haptics = LocalHapticFeedback.current
         BackHandler(enabled = showSettings || showGlass || showCalendar || openItem != null) {
