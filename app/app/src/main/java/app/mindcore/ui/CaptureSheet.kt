@@ -76,6 +76,7 @@ fun CaptureContent(initial: Capture, capturer: Capturer?, editable: Boolean, onD
     var input by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var state by remember { mutableStateOf<SaveState>(SaveState.Idle) }
+    var voice by remember { mutableStateOf<java.io.File?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris ->
@@ -117,6 +118,8 @@ fun CaptureContent(initial: Capture, capturer: Capturer?, editable: Boolean, onD
                     label = { Text("Add screenshots") })
             }
         }
+        // Say why you saved it, a deadline, anything: it's transcribed and read with the save.
+        if (merged.chatExport == null) VoiceButton("Add a voice note", onRecorded = { voice = it })
         if (merged.chatExport == null && !(editable && merged.links.isEmpty() && merged.images.isEmpty())) {
             OutlinedTextField(
                 value = note, onValueChange = { note = it },
@@ -134,13 +137,13 @@ fun CaptureContent(initial: Capture, capturer: Capturer?, editable: Boolean, onD
                             state = SaveState.Saving
                             scope.launch {
                                 state = try {
-                                    SaveState.Done(capturer.save(merged, note).message)
+                                    SaveState.Done(capturer.save(merged, note, voice).message)
                                 } catch (e: Exception) {
                                     SaveState.Failed(e.message ?: "Couldn't save")
                                 }
                             }
                         },
-                        enabled = !merged.isEmpty,
+                        enabled = !merged.isEmpty || voice != null,
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                     ) { Text(if (s is SaveState.Failed) "Try again" else "Save") }
                 }

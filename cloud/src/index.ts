@@ -2,6 +2,7 @@
 import { kindHint, normalizeUrl, shortHash, triage } from "./links.ts";
 import { chatLinks } from "./whatsapp.ts";
 import { downloadApk, latestRelease, publishRelease } from "./updates.ts";
+import { addItemVoice, isOwnAudio, transcribe } from "./voice.ts";
 import { ask, claimResearch, createResearch, finishResearch, getResearch, indexSaves, reindex } from "./ask.ts";
 
 export interface Env {
@@ -60,6 +61,8 @@ export default {
       const itemMatch = path.match(/^\/v1\/items\/([0-9a-f]{16})$/);
       if (itemMatch && req.method === "GET") return await getItem(itemMatch[1], env);
       if (itemMatch && req.method === "PATCH") return await patchItem(itemMatch[1], req, env);
+      const voice = path.match(/^\/v1\/items\/([0-9a-f]{16})\/voice$/);
+      if (voice && req.method === "POST") return await addItemVoice(voice[1], req, env);
       if (path === "/v1/search" && req.method === "POST") return await search(req, env);
       if (path === "/v1/ask" && req.method === "POST") return await ask(req, env, (q, limit) => hybridItems(env, q, {}, limit));
       if (path === "/v1/research" && req.method === "POST") return await createResearch(req, env);
@@ -88,6 +91,7 @@ export default {
 
 interface SaveIn {
   url?: string; image_url?: string; text?: string; note?: string; title?: string; source?: string; saved_at?: string;
+  voice_url?: string; // a voice note recorded with this save
 }
 type Counts = { added: number; duplicate: number; skipped: number; queued: number; invalid: number };
 
@@ -104,6 +108,12 @@ async function ingest(env: Env, saves: SaveIn[]): Promise<Counts> {
   const statements: D1PreparedStatement[] = [];
   const seen = new Set<string>();
   for (const s of saves) {
+    if (s.voice_url) {
+      if (!isOwnAudio(env, s.voice_url)) { counts.invalid++; continue; }
+      const heard = await transcribe(env, s.voice_url).catch(() => "");
+      if (heard) s.note = [s.note, `🎙 ${heard}`].filter(Boolean).join("\n");
+      if (!s.url && !s.image_url && !s.text) s.text = heard || undefined;
+    }
     let row: { id: string; url: string | null; host: string | null; kind: string; shelf: string; mine: boolean; note: string | null };
     if (s.url) {
       let norm: string;
@@ -137,6 +147,7 @@ async function ingest(env: Env, saves: SaveIn[]): Promise<Counts> {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(row.id, row.url, s.url ?? s.image_url ?? null, row.host, row.kind, row.shelf, row.mine ? 1 : 0,
         s.title ?? null, row.note, s.source ?? "share", s.saved_at ?? new Date().toISOString(), process ? "queued" : "done"),
+      ...(s.voice_url ? [env.DB.prepare("UPDATE saves SET voice_url = ? WHERE id = ?").bind(s.voice_url, row.id)] : []),
     );
     if (process) {
       counts.queued++;
@@ -182,7 +193,9 @@ async function signUpload(env: Env): Promise<Response> {
   const digest = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(toSign));
   const signature = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
   return json({ cloud_name: c.cloud, api_key: c.key, timestamp, folder, signature,
-    upload_url: `https://api.cloudinary.com/v1_1/${c.cloud}/image/upload` });
+    upload_url: `https://api.cloudinary.com/v1_1/${c.cloud}/image/upload`,
+    // Cloudinary files audio under "video".
+    audio_upload_url: `https://api.cloudinary.com/v1_1/${c.cloud}/video/upload` });
 }
 
 async function listSaves(url: URL, env: Env): Promise<Response> {

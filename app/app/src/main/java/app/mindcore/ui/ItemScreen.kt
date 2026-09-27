@@ -48,6 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.mindcore.data.Api
+import app.mindcore.data.Capturer
 import app.mindcore.data.ApiItem
 import app.mindcore.data.ItemDetail
 import kotlinx.coroutines.launch
@@ -130,6 +131,27 @@ fun ItemScreen(id: String, api: Api, onBack: () -> Unit, onOpenItem: (String) ->
                         )
                     }
                 }
+            }
+        }
+        item {
+            var busy by remember(id) { mutableStateOf<String?>(null) }
+            Block("Your notes") {
+                it.userNote?.takeIf { n -> n.isNotBlank() }?.let { n -> Text(n, style = MaterialTheme.typography.bodyMedium) }
+                    ?: Text("Nothing yet. Add a voice note: why you saved it, when to try it, any deadline.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (busy != null) Text(busy!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                VoiceButton("Add voice note", onRecorded = { file ->
+                    if (file == null) return@VoiceButton
+                    busy = "Saving and transcribing…"
+                    scope.launch {
+                        busy = try {
+                            val url = Capturer(context.applicationContext, api).uploadAudio(file)
+                            api.addVoiceNote(it.id, url)
+                            detail = api.item(id)
+                            null
+                        } catch (e: Exception) { e.message ?: "Couldn't save the voice note" }
+                    }
+                })
             }
         }
         item { SectionTitle("Where you saved it") }
