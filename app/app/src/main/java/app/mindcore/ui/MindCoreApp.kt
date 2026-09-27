@@ -2,6 +2,11 @@ package app.mindcore.ui
 
 import android.os.Build
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -22,7 +26,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -43,7 +46,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -75,6 +77,7 @@ fun MindCoreApp() {
         var tab by rememberSaveable { mutableIntStateOf(0) }
         val backdrop = rememberLayerBackdrop()
 
+        CompositionLocalProvider(LocalContentColor provides scheme.onSurface) {
         Box(Modifier.fillMaxSize().background(scheme.surface)) {
             // Everything in this layer is what the glass bends and blurs.
             Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) {
@@ -84,7 +87,9 @@ fun MindCoreApp() {
                     else -> Placeholder(tabs[tab].first)
                 }
             }
-            BottomBar(tab, { tab = it }, backdrop, Modifier.align(Alignment.BottomCenter))
+            // Pass a lambda that reads the state (not the Int), so the glass puck sees every change.
+            BottomBar({ tab }, { tab = it }, backdrop, Modifier.align(Alignment.BottomCenter))
+        }
         }
     }
 }
@@ -92,12 +97,12 @@ fun MindCoreApp() {
 /** Soft wallpaper-colored light behind the content, so the glass has color to refract. */
 @Composable
 private fun Glow(scheme: ColorScheme) {
-    Box(Modifier.fillMaxSize()) {
-        Box(Modifier.size(320.dp).offset((-80).dp, (-60).dp).blur(120.dp).background(scheme.primary.copy(0.35f), CircleShape))
-        Box(Modifier.size(280.dp).align(Alignment.CenterEnd).offset(90.dp, 40.dp).blur(120.dp)
-            .background(scheme.tertiary.copy(0.30f), CircleShape))
-        Box(Modifier.size(260.dp).align(Alignment.BottomStart).offset((-40).dp, 20.dp).blur(110.dp)
-            .background(scheme.secondary.copy(0.30f), CircleShape))
+    Canvas(Modifier.fillMaxSize()) {
+        fun glow(color: Color, center: Offset, radius: Float) =
+            drawCircle(Brush.radialGradient(listOf(color, Color.Transparent), center, radius), radius, center)
+        glow(scheme.primary.copy(alpha = 0.40f), Offset(size.width * 0.1f, size.height * 0.08f), size.width * 0.9f)
+        glow(scheme.tertiary.copy(alpha = 0.32f), Offset(size.width * 1.0f, size.height * 0.5f), size.width * 0.8f)
+        glow(scheme.secondary.copy(alpha = 0.30f), Offset(size.width * 0.0f, size.height * 0.95f), size.width * 0.8f)
     }
 }
 
@@ -134,6 +139,7 @@ private fun ItemCard(item: Item) {
     Surface(
         shape = RoundedCornerShape(28.dp),
         color = scheme.surfaceContainerHigh.copy(alpha = 0.92f),
+        contentColor = scheme.onSurface,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -177,17 +183,18 @@ private fun Placeholder(title: String) {
 }
 
 @Composable
-private fun BottomBar(selected: Int, onSelect: (Int) -> Unit, backdrop: Backdrop, modifier: Modifier) {
+private fun BottomBar(selected: () -> Int, onSelect: (Int) -> Unit, backdrop: Backdrop, modifier: Modifier) {
     val contentColor = Color.White
     Row(
         modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         LiquidBottomTabs(
-            selectedTabIndex = { selected },
+            selectedTabIndex = selected,
             onTabSelected = onSelect,
             backdrop = backdrop,
             tabsCount = tabs.size,
+            accentColor = MaterialTheme.colorScheme.primary,
             modifier = Modifier.weight(1f),
         ) {
             tabs.forEachIndexed { index, (label, icon) ->

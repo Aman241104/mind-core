@@ -18,7 +18,10 @@ Run on the real WhatsApp export and 10 real reels. Code in `brain/` (`uv run min
 - **OmniRoute server is not running** (port 20128 down; its router on 20200 is up, the 6-hourly health check failed at 11:09). No systemd unit starts OmniRoute itself. Not touched.
 - WhatsApp export still has **no media** (the `chat.md` suggests a converter dropped it).
 
+| **Android build + glass on the 7a** (`app/`, Kotlin + Compose, AGP 9.3.2, compileSdk 37, JDK 21 + SDK in `~`) | ✅ Installs and runs on Android 17 beta. Glass tab bar (Kyant0/backdrop 2.0.1) + round capture button, For You with 7 real M0 items, Material You colors. **Scrolling (debug build): 461 frames, 0.87 % janky, p50 11 ms / p90 15 ms, GPU p99 5 ms**, so the glass costs little GPU. Bugs found on the phone and fixed: black text on dark cards, hard-edged glow, puck not following the selected tab. |
+
+Build: `cd app && JAVA_HOME=~/.local/share/jdk/jdk-21.0.12.1+1 ./gradlew assembleDebug` → `adb install -r app/build/outputs/apk/debug/app-debug.apk`. Phone over Wi-Fi: `adb connect 192.168.31.205:5555` (tcpip mode resets when the phone reboots).
+
 ## Still open in M0
-- Android SDK install + "hello glass" screen on the 7a (needs the phone on USB with debugging on).
 - Hindi/Hinglish reel test (none of the 10 sampled reels were Hindi).
 - RAM/heat of Gemma during a long batch on the 7a.

@@ -1,7 +1,7 @@
 /*
  * Adapted from Kyant0/AndroidLiquidGlass catalog (components/LiquidBottomTabs.kt)
  * https://github.com/Kyant0/AndroidLiquidGlass, Copyright Kyant0, Apache License 2.0
- * Changes: package renamed.
+ * Changes: package renamed; accent color is a parameter (mind-core passes the wallpaper color).
  */
 package app.mindcore.ui.glass
 
@@ -68,11 +68,12 @@ fun LiquidBottomTabs(
     backdrop: Backdrop,
     tabsCount: Int,
     modifier: Modifier = Modifier,
+    accentColor: Color? = null,
     content: @Composable RowScope.() -> Unit
 ) {
     val isLightTheme = !isSystemInDarkTheme()
-    val accentColor =
-        if (isLightTheme) Color(0xFF0088FF)
+    val accentColor = accentColor
+        ?: if (isLightTheme) Color(0xFF0088FF)
         else Color(0xFF0091FF)
     val containerColor =
         if (isLightTheme) Color(0xFFFAFAFA).copy(0.4f)
