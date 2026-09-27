@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -28,7 +29,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -45,7 +45,12 @@ import app.mindcore.settings.Research
 import app.mindcore.settings.ThemeMode
 
 @Composable
-fun SettingsScreen(settings: AppSettings, onChange: ((AppSettings) -> AppSettings) -> Unit, onBack: () -> Unit) {
+fun SettingsScreen(
+    settings: AppSettings,
+    onChange: ((AppSettings) -> AppSettings) -> Unit,
+    onOpenGlass: () -> Unit,
+    onBack: () -> Unit,
+) {
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -72,17 +77,18 @@ fun SettingsScreen(settings: AppSettings, onChange: ((AppSettings) -> AppSetting
                 Divider()
                 Choice("Theme", ThemeMode.entries, settings.theme, { it.label }) { v -> onChange { it.copy(theme = v) } }
                 Divider()
-                Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
-                    Text("Glass", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        when {
-                            settings.glass < 0.05f -> "Off: plain frosted bar, lightest on battery"
-                            settings.glass < 0.7f -> "Subtle: blur with a little bending"
-                            else -> "Full: liquid glass that bends what's behind it"
-                        },
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Slider(value = settings.glass, onValueChange = { v -> onChange { it.copy(glass = v) } })
+                Row(
+                    Modifier.fillMaxWidth().clickable(onClick = onOpenGlass).padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Liquid Glass", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "${settings.glass.preset.label} · blur, lens, tint, highlight, per component",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null)
                 }
                 Divider()
                 Toggle("Haptics", "Small taps when you switch tabs and finish actions", settings.haptics) { v ->

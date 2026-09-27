@@ -79,11 +79,16 @@ fun MindCoreApp() {
     MaterialTheme(colorScheme = scheme) {
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var showSettings by rememberSaveable { mutableStateOf(false) }
+        var showGlass by rememberSaveable { mutableStateOf(false) }
         var openItem by rememberSaveable { mutableStateOf<String?>(null) }
         val backdrop = rememberLayerBackdrop()
         val haptics = LocalHapticFeedback.current
-        BackHandler(enabled = showSettings || openItem != null) {
-            if (openItem != null) openItem = null else showSettings = false
+        BackHandler(enabled = showSettings || showGlass || openItem != null) {
+            when {
+                openItem != null -> openItem = null
+                showGlass -> showGlass = false
+                else -> showSettings = false
+            }
         }
 
         CompositionLocalProvider(LocalContentColor provides scheme.onSurface) {
@@ -94,7 +99,12 @@ fun MindCoreApp() {
                     val api = library.api
                     val itemId = openItem
                     when {
-                        showSettings -> SettingsScreen(settings, update) { showSettings = false }
+                        showGlass -> GlassSettingsScreen(
+                            style = settings.glass, dark = dark,
+                            onChange = { g -> update { it.copy(glass = g) } },
+                            onBack = { showGlass = false },
+                        )
+                        showSettings -> SettingsScreen(settings, update, onOpenGlass = { showGlass = true }) { showSettings = false }
                         itemId != null && api != null -> ItemScreen(
                             id = itemId, api = api,
                             onBack = { openItem = null },
@@ -106,7 +116,7 @@ fun MindCoreApp() {
                         else -> Placeholder("Ask", "Chat with everything you saved comes in M3.")
                     }
                 }
-                if (!showSettings && openItem == null) {
+                if (!showSettings && !showGlass && openItem == null) {
                     // Pass a lambda that reads the state (not the Int), so the glass puck sees every change.
                     BottomBar(
                         selected = { tab },
@@ -115,7 +125,7 @@ fun MindCoreApp() {
                             tab = index
                         },
                         backdrop = backdrop,
-                        glass = settings.glass,
+                        style = settings.glass,
                         dark = dark,
                         modifier = Modifier.align(Alignment.BottomCenter),
                     )

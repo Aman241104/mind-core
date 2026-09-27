@@ -1,8 +1,8 @@
 /*
  * Adapted from Kyant0/AndroidLiquidGlass catalog (components/LiquidBottomTabs.kt)
  * https://github.com/Kyant0/AndroidLiquidGlass, Copyright Kyant0, Apache License 2.0
- * Changes: package renamed; accent color, light/dark and glass strength are parameters
- *          (driven by mind-core's Settings).
+ * Changes: package renamed; accent color, light/dark, every glass effect/color (GlassLook) and an
+ *          onDrawBackdrop hook (for adaptive contrast) are parameters driven by mind-core's Settings.
  */
 package app.mindcore.ui.glass
 
@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastCoerceIn
 import androidx.compose.ui.util.fastRoundToInt
@@ -71,17 +72,14 @@ fun LiquidBottomTabs(
     modifier: Modifier = Modifier,
     accentColor: Color? = null,
     isLight: Boolean? = null,
-    glass: Float = 1f,
+    look: GlassLook,
+    onDrawBackdrop: DrawScope.(drawBackdrop: DrawScope.() -> Unit) -> Unit = { it() },
     content: @Composable RowScope.() -> Unit
 ) {
     val isLightTheme = isLight ?: !isSystemInDarkTheme()
     val accentColor = accentColor
         ?: if (isLightTheme) Color(0xFF0088FF)
         else Color(0xFF0091FF)
-    val containerColor =
-        if (isLightTheme) Color(0xFFFAFAFA).copy(0.4f)
-        else Color(0xFF121212).copy(0.4f)
-
     val tabsBackdrop = rememberLayerBackdrop()
 
     BoxWithConstraints(
@@ -176,9 +174,9 @@ fun LiquidBottomTabs(
                     backdrop = backdrop,
                     shape = { Capsule() },
                     effects = {
-                        vibrancy()
-                        blur(8f.dp.toPx() * (0.5f + glass / 2f))
-                        if (glass > 0f) lens(24f.dp.toPx() * glass, 24f.dp.toPx() * glass)
+                        if (look.vibrancy) vibrancy()
+                        blur(look.blurDp.dp.toPx())
+                        lens(look.lensHeightDp.dp.toPx(), look.lensAmountDp.dp.toPx(), depthEffect = look.depthEffect)
                     },
                     layerBlock = {
                         val progress = dampedDragAnimation.pressProgress
@@ -186,7 +184,9 @@ fun LiquidBottomTabs(
                         scaleX = scale
                         scaleY = scale
                     },
-                    onDrawSurface = { drawRect(containerColor) }
+                    highlight = { look.highlight },
+                    onDrawBackdrop = onDrawBackdrop,
+                    onDrawSurface = { drawRect(look.surface) }
                 )
                 .then(interactiveHighlight.modifier)
                 .height(64f.dp)
@@ -214,18 +214,19 @@ fun LiquidBottomTabs(
                         shape = { Capsule() },
                         effects = {
                             val progress = dampedDragAnimation.pressProgress
-                            vibrancy()
-                            blur(8f.dp.toPx() * (0.5f + glass / 2f))
-                            if (glass > 0f) lens(
-                                24f.dp.toPx() * progress * glass,
-                                24f.dp.toPx() * progress * glass
+                            if (look.vibrancy) vibrancy()
+                            blur(look.blurDp.dp.toPx())
+                            lens(
+                                look.lensHeightDp.dp.toPx() * progress,
+                                look.lensAmountDp.dp.toPx() * progress,
+                                depthEffect = look.depthEffect
                             )
                         },
                         highlight = {
                             val progress = dampedDragAnimation.pressProgress
-                            Highlight.Default.copy(alpha = progress)
+                            look.highlight.copy(alpha = progress)
                         },
-                        onDrawSurface = { drawRect(containerColor) }
+                        onDrawSurface = { drawRect(look.surface) }
                     )
                     .then(interactiveHighlight.modifier)
                     .height(56f.dp)
@@ -252,15 +253,18 @@ fun LiquidBottomTabs(
                     shape = { Capsule() },
                     effects = {
                         val progress = dampedDragAnimation.pressProgress
-                        if (glass > 0f) lens(
-                            10f.dp.toPx() * progress * glass,
-                            14f.dp.toPx() * progress * glass,
-                            chromaticAberration = true
+                        // The catalog's puck lens (10/14 dp) scaled by how strong the bar's lens is set.
+                        val k = look.lensAmountDp / 24f
+                        lens(
+                            10f.dp.toPx() * progress * k,
+                            14f.dp.toPx() * progress * k,
+                            depthEffect = look.depthEffect,
+                            chromaticAberration = look.chromaticAberration
                         )
                     },
                     highlight = {
                         val progress = dampedDragAnimation.pressProgress
-                        Highlight.Default.copy(alpha = progress)
+                        look.highlight.copy(alpha = progress)
                     },
                     shadow = {
                         val progress = dampedDragAnimation.pressProgress
@@ -282,11 +286,7 @@ fun LiquidBottomTabs(
                     },
                     onDrawSurface = {
                         val progress = dampedDragAnimation.pressProgress
-                        drawRect(
-                            if (isLightTheme) Color.Black.copy(0.1f)
-                            else Color.White.copy(0.1f),
-                            alpha = 1f - progress
-                        )
+                        drawRect(look.pill, alpha = 1f - progress)
                         drawRect(Color.Black.copy(alpha = 0.03f * progress))
                     }
                 )

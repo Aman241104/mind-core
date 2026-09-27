@@ -1,84 +1,60 @@
 package app.mindcore.ui
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.foundation.shape.CircleShape
-import app.mindcore.settings.AppSettings
-import app.mindcore.settings.SettingsStore
-import app.mindcore.ui.theme.colorSchemeFor
-import app.mindcore.ui.theme.isDark
-import kotlinx.coroutines.launch
-import androidx.compose.foundation.background
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.material3.LocalContentColor
+import android.graphics.Bitmap
+import androidx.compose.animation.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsTopHeight
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.unit.dp
+import app.mindcore.settings.GlassStyle
+import app.mindcore.ui.glass.GlassLook
 import app.mindcore.ui.glass.LiquidBottomTab
 import app.mindcore.ui.glass.LiquidBottomTabs
 import com.kyant.backdrop.Backdrop
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.shapes.Capsule
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
-private val tabs = listOf(
+internal val tabs = listOf(
     "For You" to Icons.Rounded.Home,
     "Library" to Icons.AutoMirrored.Rounded.List,
     "Ask" to Icons.Rounded.Search,
 )
-
 
 /** Soft wallpaper-colored light behind the content, so the glass has color to refract. */
 @Composable
@@ -92,16 +68,77 @@ internal fun Glow(scheme: ColorScheme) {
     }
 }
 
+/** Resolve the saved style against the theme (null colors = theme defaults, same as Kyant's catalog). */
+@Composable
+internal fun GlassStyle.look(dark: Boolean): GlassLook {
+    val base = if (dark) Color(0xFF121212) else Color(0xFFFAFAFA)
+    return GlassLook(
+        vibrancy = vibrancy,
+        blurDp = blur,
+        lensHeightDp = lensHeight,
+        lensAmountDp = lensAmount,
+        chromaticAberration = chromaticAberration,
+        depthEffect = depthEffect,
+        surface = (tint?.let { Color(it) } ?: base).copy(alpha = tintOpacity),
+        pill = (pillColor?.let { Color(it) } ?: if (dark) Color.White else Color.Black).copy(alpha = pillOpacity),
+        highlight = GlassLook.highlightOf(highlightColor?.let { Color(it) } ?: Color.White, highlightOpacity),
+    )
+}
+
+/**
+ * Adaptive contrast: every ~0.4 s, shrink what the glass is showing to 5×5 pixels, average its brightness
+ * (blended with the tint), and fade icons/text to black or white. Same idea as Kyant's AdaptiveLuminance demo.
+ */
+@Composable
+private fun rememberAdaptiveContent(enabled: Boolean, fallback: Color, look: GlassLook): Pair<GraphicsLayer, () -> Color> {
+    val layer = rememberGraphicsLayer()
+    val color = remember { Animatable(fallback) }
+    LaunchedEffect(enabled, fallback, look.surface) {
+        if (!enabled) {
+            color.animateTo(fallback, tween(300))
+            return@LaunchedEffect
+        }
+        val buffer = IntArray(25)
+        while (isActive) {
+            delay(400)
+            val lum = runCatching {
+                val bmp = layer.toImageBitmap().asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, false)
+                Bitmap.createScaledBitmap(bmp, 5, 5, true).getPixels(buffer, 0, 5, 0, 0, 5, 5)
+                buffer.sumOf { argb ->
+                    0.2126 * (argb shr 16 and 0xFF) / 255 + 0.7152 * (argb shr 8 and 0xFF) / 255 + 0.0722 * (argb and 0xFF) / 255
+                } / buffer.size
+            }.getOrNull() ?: continue
+            val a = look.surface.alpha
+            val seen = lum * (1 - a) + look.surface.luminance() * a
+            color.animateTo(if (seen > 0.55) Color.Black else Color.White, tween(600))
+        }
+    }
+    return layer to { color.value }
+}
+
+private fun recordInto(layer: GraphicsLayer): DrawScope.(DrawScope.() -> Unit) -> Unit = { drawBackdrop ->
+    drawBackdrop()
+    layer.record { drawBackdrop() }
+}
+
 @Composable
 internal fun BottomBar(
     selected: () -> Int,
     onSelect: (Int) -> Unit,
     backdrop: Backdrop,
-    glass: Float,
+    style: GlassStyle,
     dark: Boolean,
     modifier: Modifier,
 ) {
-    val contentColor = if (dark) Color.White else Color.Black
+    val container = MaterialTheme.colorScheme.surfaceContainerHigh
+    val glassLook = style.look(dark)
+    val barLook = if (style.glassTabBar) glassLook else glassLook.solid(container)
+    val buttonLook = if (style.glassCaptureButton) glassLook else glassLook.solid(container)
+    val (layer, contentColor) = rememberAdaptiveContent(
+        enabled = style.adaptiveContrast && style.glassTabBar,
+        fallback = if (dark) Color.White else Color.Black,
+        look = barLook,
+    )
     Row(
         modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -113,24 +150,26 @@ internal fun BottomBar(
             tabsCount = tabs.size,
             accentColor = MaterialTheme.colorScheme.primary,
             isLight = !dark,
-            glass = glass,
+            look = barLook,
+            onDrawBackdrop = recordInto(layer),
             modifier = Modifier.weight(1f),
         ) {
             tabs.forEachIndexed { index, (label, icon) ->
                 LiquidBottomTab({ onSelect(index) }) {
-                    Icon(icon, contentDescription = null, tint = contentColor, modifier = Modifier.size(24.dp))
-                    Text(label, style = MaterialTheme.typography.labelSmall, color = contentColor)
+                    val c = contentColor()
+                    Icon(icon, contentDescription = null, tint = c, modifier = Modifier.size(24.dp))
+                    Text(label, style = MaterialTheme.typography.labelSmall, color = c)
                 }
             }
         }
         Spacer(Modifier.width(12.dp))
-        CaptureButton(backdrop, glass, dark, contentColor)
+        CaptureButton(backdrop, buttonLook, contentColor)
     }
 }
 
 /** Round glass "+" beside the tabs, like Convx's search button. Opens the capture sheet (M2). */
 @Composable
-private fun CaptureButton(backdrop: Backdrop, glass: Float, dark: Boolean, contentColor: Color) {
+private fun CaptureButton(backdrop: Backdrop, look: GlassLook, contentColor: () -> Color) {
     Box(
         Modifier
             .size(64.dp)
@@ -138,15 +177,17 @@ private fun CaptureButton(backdrop: Backdrop, glass: Float, dark: Boolean, conte
                 backdrop = backdrop,
                 shape = { Capsule() },
                 effects = {
-                    vibrancy()
-                    blur(8f.dp.toPx() * (0.5f + glass / 2f))
-                    if (glass > 0f) lens(16f.dp.toPx() * glass, 32f.dp.toPx() * glass)
+                    if (look.vibrancy) vibrancy()
+                    blur(look.blurDp.dp.toPx())
+                    lens(look.lensHeightDp.dp.toPx() * 0.66f, look.lensAmountDp.dp.toPx() * 1.33f,
+                        depthEffect = look.depthEffect, chromaticAberration = look.chromaticAberration)
                 },
-                onDrawSurface = { drawRect((if (dark) Color(0xFF121212) else Color(0xFFFAFAFA)).copy(alpha = 0.4f)) },
+                highlight = { look.highlight },
+                onDrawSurface = { drawRect(look.surface) },
             )
             .clickable { },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Rounded.Add, contentDescription = "Capture", tint = contentColor, modifier = Modifier.size(30.dp))
+        Icon(Icons.Rounded.Add, contentDescription = "Capture", tint = contentColor(), modifier = Modifier.size(30.dp))
     }
 }
