@@ -1,10 +1,12 @@
 // mind-core API on Cloudflare Workers: saves in, items out, jobs for the laptop brain, hybrid search.
 import { kindHint, normalizeUrl, shortHash, triage } from "./links.ts";
 import { chatLinks } from "./whatsapp.ts";
+import { ask, claimResearch, createResearch, finishResearch, getResearch, indexSaves, reindex } from "./ask.ts";
 
 export interface Env {
   DB: D1Database;
   VEC: VectorizeIndex;
+  VEC_CHUNKS: VectorizeIndex; // saved text (transcripts, captions, screen text) for Ask
   AI: Ai;
   API_TOKEN: string; // the phone
   BRAIN_TOKEN: string; // the laptop
@@ -38,6 +40,10 @@ export default {
         if (path === "/v1/brain/claim" && req.method === "POST") return await claim(req, env);
         if (path === "/v1/brain/complete" && req.method === "POST") return await complete(req, env);
         if (path === "/v1/brain/fail" && req.method === "POST") return await fail(req, env);
+        if (path === "/v1/brain/reindex" && req.method === "POST") return await reindex(env);
+        if (path === "/v1/brain/research/claim" && req.method === "POST") return await claimResearch(env);
+        const done = path.match(/^\/v1\/brain\/research\/(\d+)$/);
+        if (done && req.method === "POST") return await finishResearch(Number(done[1]), req, env);
         const fix = path.match(/^\/v1\/brain\/items\/([0-9a-f]{16})$/);
         if (fix && req.method === "POST") return await correctItem(fix[1], req, env);
         return bad("not found", 404);
@@ -52,6 +58,10 @@ export default {
       if (itemMatch && req.method === "GET") return await getItem(itemMatch[1], env);
       if (itemMatch && req.method === "PATCH") return await patchItem(itemMatch[1], req, env);
       if (path === "/v1/search" && req.method === "POST") return await search(req, env);
+      if (path === "/v1/ask" && req.method === "POST") return await ask(req, env, (q, limit) => hybridItems(env, q, {}, limit));
+      if (path === "/v1/research" && req.method === "POST") return await createResearch(req, env);
+      const research = path.match(/^\/v1\/research\/(\d+)$/);
+      if (research && req.method === "GET") return await getResearch(Number(research[1]), env);
       if (path === "/v1/status" && req.method === "GET") return await status(env);
       return bad("not found", 404);
     } catch (e) {
@@ -275,7 +285,9 @@ interface ItemIn {
 }
 interface CompleteIn {
   job_id: number;
-  save: { creator?: string; caption?: string; transcript?: string; language?: string; promo?: boolean; shelf?: string };
+  save: {
+    creator?: string; caption?: string; transcript?: string; screen_text?: string; language?: string; promo?: boolean; shelf?: string;
+  };
   items: ItemIn[];
 }
 
@@ -289,9 +301,9 @@ async function complete(req: Request, env: Env): Promise<Response> {
   const shelf = s.shelf === "work" || s.shelf === "learning" ? s.shelf : undefined;
   const statements: D1PreparedStatement[] = [
     env.DB.prepare(
-      `UPDATE saves SET status = 'done', error = NULL, creator = ?, caption = ?, transcript = ?, language = ?, promo = ?,
-         shelf = COALESCE(?, shelf) WHERE id = ?`,
-    ).bind(s.creator ?? null, s.caption ?? null, s.transcript ?? null, s.language ?? null,
+      `UPDATE saves SET status = 'done', error = NULL, creator = ?, caption = ?, transcript = ?, screen_text = ?, language = ?,
+         promo = ?, shelf = COALESCE(?, shelf) WHERE id = ?`,
+    ).bind(s.creator ?? null, s.caption ?? null, s.transcript ?? null, s.screen_text?.slice(0, 20000) ?? null, s.language ?? null,
       s.promo == null ? null : s.promo ? 1 : 0, shelf ?? null, saveId),
     env.DB.prepare("UPDATE jobs SET status = 'done', error = NULL, updated_at = datetime('now') WHERE id = ?").bind(body.job_id),
   ];
@@ -348,6 +360,7 @@ async function complete(req: Request, env: Env): Promise<Response> {
     out.data.forEach((v, i) => (vectors[i].values = v));
     await env.VEC.upsert(vectors);
   }
+  if (shelf !== "work") await indexSaves(env, [saveId]); // makes its text quotable by Ask
   return json({ ok: true, items: itemIds.length });
 }
 
@@ -387,29 +400,31 @@ async function fail(req: Request, env: Env): Promise<Response> {
 async function search(req: Request, env: Env): Promise<Response> {
   const body = (await req.json()) as { q: string; kind?: string; trust?: string; limit?: number };
   if (!body.q?.trim()) return bad("empty query");
-  const limit = Math.min(body.limit ?? 10, 50);
-  const filter: VectorizeVectorMetadataFilter = { shelf: "learning" };
-  if (body.kind) filter.kind = body.kind;
-  if (body.trust) filter.trust = body.trust;
+  return json(await hybridItems(env, body.q, { kind: body.kind, trust: body.trust }, Math.min(body.limit ?? 10, 50)));
+}
 
-  // Meaning search and keyword search, merged with reciprocal rank fusion.
-  const emb = (await env.AI.run(EMBED_MODEL, { text: [body.q] })) as { data: number[][] };
+/** Meaning search (Vectorize) + keyword search (FTS5), merged with reciprocal rank fusion. */
+async function hybridItems(env: Env, q: string, f: { kind?: string; trust?: string }, limit: number) {
+  const filter: VectorizeVectorMetadataFilter = { shelf: "learning" };
+  if (f.kind) filter.kind = f.kind;
+  if (f.trust) filter.trust = f.trust;
+  const emb = (await env.AI.run(EMBED_MODEL, { text: [q] })) as { data: number[][] };
   const [vec, fts] = await Promise.all([
     env.VEC.query(emb.data[0], { topK: 30, filter }),
     env.DB.prepare(
       `SELECT f.item_id FROM items_fts f JOIN items i ON i.id = f.item_id
-       WHERE items_fts MATCH ? ${body.kind ? "AND i.kind = ?" : ""} ${body.trust ? "AND i.trust = ?" : ""}
+       WHERE items_fts MATCH ? ${f.kind ? "AND i.kind = ?" : ""} ${f.trust ? "AND i.trust = ?" : ""}
        ORDER BY bm25(items_fts) LIMIT 30`,
-    ).bind(ftsQuery(body.q), ...[body.kind, body.trust].filter(Boolean)).all<{ item_id: string }>(),
+    ).bind(ftsQuery(q), ...[f.kind, f.trust].filter(Boolean)).all<{ item_id: string }>(),
   ]);
   const score = new Map<string, number>();
   vec.matches.forEach((m, rank) => score.set(m.id, (score.get(m.id) ?? 0) + 1 / (60 + rank)));
   fts.results.forEach((r, rank) => score.set(r.item_id, (score.get(r.item_id) ?? 0) + 1 / (60 + rank)));
   const top = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([id]) => id);
-  if (!top.length) return json([]);
+  if (!top.length) return [];
   const rows = await env.DB.prepare(`SELECT * FROM items WHERE id IN (${top.map(() => "?").join(",")})`).bind(...top).all();
   const byId = new Map(rows.results.map((r) => [r.id as string, parseItem(r)]));
-  return json(top.map((id) => byId.get(id)).filter(Boolean));
+  return top.map((id) => byId.get(id)).filter((x): x is ReturnType<typeof parseItem> => !!x);
 }
 
 /** Turn free text into a safe FTS5 query: each word as a prefix term, OR-ed. */

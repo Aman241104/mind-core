@@ -7,7 +7,10 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "mindcore", "database_id": "9032db56-c5f8-471c-9813-34da3bb59422", "migrations_dir": "migrations" }
   ],
-  "vectorize": [{ "binding": "VEC", "index_name": "mindcore-items", "remote": true }],
+  "vectorize": [
+    { "binding": "VEC", "index_name": "mindcore-items", "remote": true },
+    { "binding": "VEC_CHUNKS", "index_name": "mindcore-chunks", "remote": true }
+  ],
   "ai": { "binding": "AI", "remote": true },
   // Hands back jobs whose worker vanished mid-lease.
   "triggers": { "crons": ["*/5 * * * *"] }

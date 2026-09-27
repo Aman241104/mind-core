@@ -62,7 +62,8 @@ def _json_from(text: str) -> dict:
     m = re.search(r"\{.*\}", text, re.S)
     if not m:
         raise ValueError(f"no JSON in model output: {text[:200]!r}")
-    return json.loads(m[0])
+    # strict=False: models often put raw line breaks inside long answer strings.
+    return json.loads(m[0], strict=False)
 
 
 # A lean headless call: no tools, MCP servers, skills, hooks or CLAUDE.md, just the prompt. This keeps each
@@ -84,5 +85,32 @@ def extract_with_claude(sources: list[Source], model: str = "sonnet", timeout: i
     # claude -p reports its errors (usage limit, login, ...) in the JSON result, not on stderr.
     if result.returncode != 0 or envelope.get("is_error"):
         reason = envelope.get("result") or result.stderr.strip() or result.stdout.strip()[:300] or f"exit {result.returncode}"
+        raise RuntimeError(f"claude -p failed: {reason}")
+    return _json_from(envelope.get("result", ""))
+
+
+RESEARCH_PROMPT = """Research this question on the web for the user and answer it.
+Use web search; prefer official sites, GitHub, docs and recent sources. Check claims instead of repeating hype.
+Be concise and practical (the user is a developer and student in India). No em dashes.
+Return ONLY JSON: {"answer": "<markdown, cite sources inline as [1], [2]>", "sources": [{"title": "...", "url": "..."}]}
+
+Question: """
+
+
+def research_with_claude(question: str, model: str = "sonnet", timeout: int = 900) -> dict:
+    """Web research on your Claude plan: same lean call as extraction, but with web search allowed."""
+    flags = list(LEAN_FLAGS)
+    flags[flags.index("--tools") + 1] = "WebSearch,WebFetch"
+    flags[flags.index("--system-prompt") + 1] = "You are a careful research assistant. Reply with JSON only."
+    result = subprocess.run(
+        ["claude", "-p", "--model", model, "--output-format", "json", "--allowedTools", "WebSearch,WebFetch", *flags],
+        input=RESEARCH_PROMPT + question, capture_output=True, text=True, timeout=timeout, cwd="/tmp",
+    )
+    try:
+        envelope = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        envelope = {}
+    if result.returncode != 0 or envelope.get("is_error"):
+        reason = envelope.get("result") or result.stderr.strip() or f"exit {result.returncode}"
         raise RuntimeError(f"claude -p failed: {reason}")
     return _json_from(envelope.get("result", ""))

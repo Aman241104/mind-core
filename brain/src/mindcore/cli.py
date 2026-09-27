@@ -93,6 +93,18 @@ def cmd_reverify(args: argparse.Namespace) -> None:
     print(f"{changed} would move to 'check claims'" if not args.apply else f"moved {changed} to 'check claims'")
 
 
+def cmd_reindex(args: argparse.Namespace) -> None:
+    """Index the text of already-processed saves so Ask can quote them."""
+    from .brain import Api
+
+    api = Api()
+    while True:
+        r = api.post("/v1/brain/reindex", {})
+        print(f"indexed {r['saves']} saves ({r['chunks']} chunks), {r['left']} left")
+        if not r["saves"]:
+            break
+
+
 def cmd_status(args: argparse.Namespace) -> None:
     from .brain import Api
 
@@ -120,6 +132,8 @@ def main() -> None:
     p = sub.add_parser("reverify", help="re-check earlier 'verified' repos with the exact-name rule")
     p.add_argument("--apply", action="store_true", help="actually change them (default: dry run)")
     p.set_defaults(func=cmd_reverify)
+    p = sub.add_parser("reindex", help="index processed saves' text for Ask")
+    p.set_defaults(func=cmd_reindex)
     p = sub.add_parser("status", help="show API status: laptop, jobs, saves, items")
     p.set_defaults(func=cmd_status)
     args = parser.parse_args()

@@ -88,6 +88,7 @@ fun MindCoreApp() {
         var openItem by rememberSaveable { mutableStateOf<String?>(null) }
         var libraryKind by rememberSaveable { mutableStateOf<String?>(null) }
         var showCapture by rememberSaveable { mutableStateOf(false) }
+        val askState = remember { AskState() }
         val backdrop = rememberLayerBackdrop()
         val haptics = LocalHapticFeedback.current
         BackHandler(enabled = showSettings || showGlass || openItem != null) {
@@ -125,7 +126,7 @@ fun MindCoreApp() {
                             onOpenKind = { k -> libraryKind = k; tab = 1 },
                         )
                         tab == 1 -> LibraryScreen(library, libraryKind, { k -> libraryKind = k }, onOpen = { id -> openItem = id })
-                        else -> Placeholder("Ask", "Chat with everything you saved comes in M3.")
+                        else -> AskScreen(askState, library.api, settings.research, onOpenItem = { id -> openItem = id })
                     }
                 }
                 if (!showSettings && !showGlass && openItem == null) {

@@ -16,13 +16,13 @@ from pathlib import Path
 
 import httpx
 
-from .extract import Source, extract_with_claude
+from .extract import Source, extract_with_claude, research_with_claude
 from .fetch import Content, FetchError, fetch
 from .verify import verify_item
 
 SECRETS = Path.home() / "stash" / ".secrets" / "tokens.env"
 HEARTBEAT_SECONDS = 60
-IDLE_SLEEP_SECONDS = 30
+IDLE_SLEEP_SECONDS = 10  # research questions wait on this, so keep it short
 
 
 def _config() -> tuple[str, str]:
@@ -92,13 +92,25 @@ def process_batch(api: Api, jobs: list[dict], log=print) -> None:
         api.post("/v1/brain/complete", {
             "job_id": job_id,
             "save": {
-                "creator": c.creator, "caption": c.caption, "transcript": c.transcript,
+                "creator": c.creator, "caption": c.caption, "transcript": c.transcript, "screen_text": c.screen_text,
                 "language": r.get("language") or c.language, "promo": r.get("promo"), "shelf": r.get("shelf"),
             },
             "items": items,
         })
         names = ", ".join(f"{it['name']}{' ✓' if it.get('trust') == 'verified' else ''}" for it in items) or "no items"
         log(f"  ✓ {job['save']['url']} [{r.get('shelf', '?')}]: {names}")
+
+
+def answer_research(api: Api, q: dict, log=print) -> None:
+    log(f"research #{q['id']}: {q['question'][:80]}")
+    try:
+        t0 = time.monotonic()
+        r = research_with_claude(q["question"])
+        api.post(f"/v1/brain/research/{q['id']}", {"answer": r.get("answer", ""), "sources": r.get("sources", [])})
+        log(f"  ✓ answered in {time.monotonic() - t0:.0f}s with {len(r.get('sources', []))} sources")
+    except Exception as e:
+        api.post(f"/v1/brain/research/{q['id']}", {"error": str(e)[:500]})
+        log(f"  ✗ research failed: {e}")
 
 
 def run(once: bool = False, batch: int = 6, max_batches: int | None = None, log=print) -> None:
@@ -111,13 +123,26 @@ def run(once: bool = False, batch: int = 6, max_batches: int | None = None, log=
 
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
-    last_beat = 0.0
     info = json.dumps({"host": platform.node(), "engines": ["claude"], "pid": os.getpid()})
+
+    # Heartbeat on its own thread: a batch can take minutes and the phone should still see "online".
+    def beat() -> None:
+        beat_api = Api()
+        while not stop:
+            try:
+                beat_api.post("/v1/brain/heartbeat", info)
+            except Exception as e:  # a missed beat just shows "offline" for a minute
+                log(f"  heartbeat failed: {e}")
+            time.sleep(HEARTBEAT_SECONDS)
+
+    threading.Thread(target=beat, daemon=True).start()
     done_batches = 0
     while not stop and (max_batches is None or done_batches < max_batches):
-        if time.monotonic() - last_beat > HEARTBEAT_SECONDS:
-            api.post("/v1/brain/heartbeat", info)
-            last_beat = time.monotonic()
+        # Someone is waiting on research, so it goes before the save backlog.
+        q = api.post("/v1/brain/research/claim", {})
+        if q:
+            answer_research(api, q, log)
+            continue
         jobs = api.post("/v1/brain/claim", {"limit": batch})
         if jobs:
             log(f"batch of {len(jobs)}")
