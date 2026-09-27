@@ -130,10 +130,20 @@ def cmd_release(args: argparse.Namespace) -> None:
         raise SystemExit("build failed:\n" + (r.stdout + r.stderr)[-2000:])
     apk = app / "app/build/outputs/apk/release/app-release.apk"
     api = Api()
-    resp = api.http.post("/v1/brain/app", content=apk.read_bytes(), timeout=300, headers={
-        "content-type": "application/vnd.android.package-archive",
-        "x-version-code": str(code), "x-version-name": name, "x-notes": quote(args.notes or ""),
-    })
+    import httpx
+
+    # Slow or flaky uplinks happen (a write once stalled past 60 s); retry a few times before giving up.
+    for attempt in range(3):
+        try:
+            resp = api.http.post("/v1/brain/app", content=apk.read_bytes(), timeout=httpx.Timeout(600.0), headers={
+                "content-type": "application/vnd.android.package-archive",
+                "x-version-code": str(code), "x-version-name": name, "x-notes": quote(args.notes or ""),
+            })
+            break
+        except httpx.TransportError as e:
+            print(f"upload attempt {attempt + 1} failed ({type(e).__name__}), retrying…")
+    else:
+        raise SystemExit("upload failed 3 times; the build is ready, run release again later")
     if resp.status_code >= 400:
         raise SystemExit(f"upload failed: {resp.text}")
     print(f"published {name} ({code}), {apk.stat().st_size // 1024} KB. The phone will offer it on next open.")
