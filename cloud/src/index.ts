@@ -5,7 +5,7 @@ import { downloadApk, latestRelease, publishRelease } from "./updates.ts";
 import { addItemVoice, isOwnAudio, transcribe } from "./voice.ts";
 import { backfillDeadlines, calendar, putDeadline, researchDeadline, upcoming } from "./deadlines.ts";
 import { graph, linkSimilar } from "./graph.ts";
-import { createNote, deleteNote, getNote, listNotes, noteFromVoice, updateNote } from "./notes.ts";
+import { createNote, deleteNote, getNote, listNotes, noteFromVoice, openTasks, purgeTrash, setTask, updateNote } from "./notes.ts";
 import { ask, claimResearch, createResearch, finishResearch, getResearch, indexSaves, reindex } from "./ask.ts";
 
 export interface Env {
@@ -68,6 +68,9 @@ export default {
       if (itemMatch && req.method === "PATCH") return await patchItem(itemMatch[1], req, env);
       if (path === "/v1/notes" && req.method === "GET") return await listNotes(url, env);
       if (path === "/v1/notes" && req.method === "POST") return await createNote(req, env, ctx);
+      if (path === "/v1/tasks" && req.method === "GET") return await openTasks(env);
+      const task = path.match(/^\/v1\/notes\/([0-9a-f]{16})\/task$/);
+      if (task && req.method === "POST") return await setTask(task[1], req, env);
       if (path === "/v1/notes/voice" && req.method === "POST") return await noteFromVoice(req, env, ctx);
       const note = path.match(/^\/v1\/notes\/([0-9a-f]{16})$/);
       if (note && req.method === "GET") return await getNote(note[1], env);
@@ -103,6 +106,7 @@ export default {
        WHERE status = 'leased' AND lease_until < datetime('now')`,
     ).run();
     await linkSimilar(env); // graph view: link new items to similar ones
+    await purgeTrash(env);
   },
 } satisfies ExportedHandler<Env>;
 

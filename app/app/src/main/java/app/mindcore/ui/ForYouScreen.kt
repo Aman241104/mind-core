@@ -28,6 +28,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.CheckBoxOutlineBlank
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Hub
@@ -42,6 +44,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -76,6 +80,9 @@ fun ForYouScreen(
     onOpenKind: (String?) -> Unit,
     onCalendar: () -> Unit,
     onGraph: () -> Unit,
+    notes: NotesState = remember { NotesState() },
+    onOpenNote: (String) -> Unit = {},
+    onSeeNotes: (filter: String) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val items = library.items
@@ -100,6 +107,25 @@ fun ForYouScreen(
                 }
             }
             library.error?.let { message -> item { Box(Modifier.padding(16.dp)) { MessageCard("Couldn't reach the server", message) } } }
+
+            // Today: jot a thought, tick off to-dos, keep ideas moving.
+            if (library.paired) item { Jot(library, notes, onOpenNote) }
+            if (notes.tasks.isNotEmpty()) {
+                item { SectionHeader("To do", if (notes.tasks.size > 5) "All ${notes.tasks.size}" else "Notes") { onSeeNotes("todo") } }
+                items(notes.tasks.take(5), key = { "task-${it.noteId}-${it.line}" }) { t ->
+                    TaskRow(t, onDone = { library.api?.let { api -> scope.launch { notes.complete(api, t) } } }, onOpen = { onOpenNote(t.noteId) })
+                }
+            }
+            val moving = notes.notes.filter { it.kind == "idea" && (it.pinned || it.stage == "growing" || it.stage == "ready") }
+                .ifEmpty { notes.notes.filter { it.kind == "idea" && it.stage == "spark" } }.take(8)
+            if (moving.isNotEmpty()) {
+                item { SectionHeader("Ideas in motion", "All ideas") { onSeeNotes("idea") } }
+                item {
+                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items(moving, key = { "idea-" + it.id }) { n -> NoteCard(n, Modifier.width(210.dp)) { onOpenNote(n.id) } }
+                    }
+                }
+            }
 
             if (library.upcoming.isNotEmpty()) {
                 item { SectionHeader("Coming up", "Calendar", onCalendar) }
@@ -175,7 +201,7 @@ private fun Header(onSettings: () -> Unit, onCalendar: () -> Unit, onGraph: () -
                 LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d MMMM")),
                 style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
             )
-            Text("For You", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+            Text("Today", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
         }
         Icon(
             Icons.Rounded.Hub, contentDescription = "Graph",
@@ -364,3 +390,74 @@ internal fun ago(sqlTime: String): String = runCatching {
         else -> "${mins / (60 * 24)} d ago"
     }
 }.getOrDefault("")
+
+/** "What's on your mind?" One line in, a spark idea out; Enter or the arrow saves it. */
+@Composable
+private fun Jot(library: Library, notes: NotesState, onOpenNote: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var text by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var savedId by remember { mutableStateOf<String?>(null) }
+    val scheme = MaterialTheme.colorScheme
+    fun send() {
+        val api = library.api ?: return
+        val t = text.trim()
+        if (t.isEmpty() || busy) return
+        busy = true
+        scope.launch {
+            runCatching { api.createNote(org.json.JSONObject().put("kind", "idea").put("title", t.take(120)).put("body", if (t.length > 120) t else "")) }
+                .onSuccess { savedId = it.summary.id; text = ""; notes.refresh(api) }
+            busy = false
+        }
+    }
+    Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp)) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(scheme.surfaceContainerHigh)
+                .padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.weight(1f).padding(vertical = 10.dp)) {
+                if (text.isEmpty()) Text("What's on your mind?", style = MaterialTheme.typography.bodyLarge, color = scheme.onSurfaceVariant)
+                androidx.compose.foundation.text.BasicTextField(
+                    text, { text = it; savedId = null },
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = scheme.onSurface),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { send() }),
+                    maxLines = 4, modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (busy) LotusBlob(BlobState.Thinking, size = 40.dp, onTap = null)
+            else CircleIconButton(Icons.AutoMirrored.Rounded.ArrowForward, "Save idea", ::send, size = 42.dp,
+                container = if (text.isBlank()) scheme.surfaceContainerHighest else scheme.inverseSurface,
+                content = if (text.isBlank()) scheme.onSurfaceVariant else scheme.inverseOnSurface)
+        }
+        savedId?.let { id ->
+            Text("Saved as a spark. Tap to add more.", style = MaterialTheme.typography.labelMedium, color = scheme.primary,
+                modifier = Modifier.padding(start = 18.dp, top = 6.dp).clickable { onOpenNote(id) })
+        }
+    }
+}
+
+@Composable
+private fun TaskRow(t: app.mindcore.data.NoteTask, onDone: () -> Unit, onOpen: () -> Unit) {
+    val p = pastelFor(t.color)
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.CheckBoxOutlineBlank, contentDescription = "Mark done",
+            modifier = Modifier.clip(CircleShape).clickable(onClick = onDone).padding(8.dp).size(24.dp))
+        Column(Modifier.weight(1f).padding(start = 6.dp)) {
+            Text(t.text, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).clip(CircleShape).background(p.bg()))
+                Spacer(Modifier.width(6.dp))
+                Text(t.noteTitle.ifBlank { "Untitled ${t.kind}" }, style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}

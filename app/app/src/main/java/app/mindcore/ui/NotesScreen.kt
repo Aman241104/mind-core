@@ -45,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,14 +68,26 @@ class NotesState {
     var loaded by mutableStateOf(false)
     var loading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
-    var filter by mutableStateOf("all") // all | note | idea | todo | pinned
+    var filter by mutableStateOf("all") // all | note | idea | todo | pinned | trash
     var stage by mutableStateOf<String?>(null)
+    var trash by mutableStateOf<List<NoteSummary>>(emptyList())
+    var tasks by mutableStateOf<List<app.mindcore.data.NoteTask>>(emptyList())
 
     suspend fun refresh(api: Api?) {
         api ?: return
         loading = true
         runCatching { api.notes() }.onSuccess { notes = it; error = null; loaded = true }.onFailure { error = it.message }
+        runCatching { api.tasks() }.onSuccess { tasks = it }
+        if (filter == "trash") runCatching { api.notes(trash = true) }.onSuccess { trash = it }
         loading = false
+    }
+
+    /** Tick a to-do from Today: gone from the list right away, put back if the server says no. */
+    suspend fun complete(api: Api, t: app.mindcore.data.NoteTask) {
+        val before = tasks
+        tasks = tasks - t
+        runCatching { api.setTask(t, true) }.onFailure { tasks = before; error = it.message }
+            .onSuccess { runCatching { api.notes() }.onSuccess { notes = it } }
     }
 }
 
@@ -134,8 +147,11 @@ fun NotesScreen(api: Api?, state: NotesState, onOpen: (String) -> Unit, onNew: (
             item(span = StaggeredGridItemSpan.FullLine) {
                 Column(Modifier.animateContentSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     PillTabs(
-                        listOf("all" to "All", "idea" to "Ideas", "note" to "Notes", "todo" to "To-do", "pinned" to "Pinned"),
-                        state.filter, { state.filter = it; if (it != "idea") state.stage = null },
+                        listOf("all" to "All", "idea" to "Ideas", "note" to "Notes", "todo" to "To-do", "pinned" to "Pinned", "trash" to "Trash"),
+                        state.filter, {
+                            state.filter = it; if (it != "idea") state.stage = null
+                            if (it == "trash" && api != null) scope.launch { runCatching { api.notes(trash = true) }.onSuccess { t -> state.trash = t } }
+                        },
                         counts = counts, contentPadding = PaddingValues(horizontal = 2.dp),
                     )
                     if (state.filter == "idea") {
@@ -150,6 +166,20 @@ fun NotesScreen(api: Api?, state: NotesState, onOpen: (String) -> Unit, onNew: (
                 !state.loaded && state.error != null -> item(span = StaggeredGridItemSpan.FullLine) { Empty(state.error!!) }
                 !state.loaded -> item(span = StaggeredGridItemSpan.FullLine) {
                     Box(Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) { LotusBlob(BlobState.Thinking, size = 64.dp, onTap = null) }
+                }
+                state.filter == "trash" -> if (state.trash.isEmpty()) item(span = StaggeredGridItemSpan.FullLine) {
+                    Empty("Trash is empty. Deleted notes stay here for 30 days.")
+                } else items(state.trash, key = { "t" + it.id }) { n ->
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Box(Modifier.graphicsLayer { alpha = 0.6f }) { NoteCard(n) {} }
+                        Text("Restore", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).pressScale {
+                                scope.launch {
+                                    runCatching { api!!.deleteNote(n.id, restore = true) }
+                                        .onSuccess { state.trash = state.trash - n; state.refresh(api) }
+                                }
+                            }.padding(horizontal = 12.dp, vertical = 6.dp))
+                    }
                 }
                 shown.isEmpty() -> item(span = StaggeredGridItemSpan.FullLine) {
                     Empty(
@@ -184,11 +214,11 @@ private fun Empty(text: String) {
 }
 
 @Composable
-private fun NoteCard(n: NoteSummary, onClick: () -> Unit) {
+internal fun NoteCard(n: NoteSummary, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val p = pastelFor(n.color)
     val ink = p.ink()
     Column(
-        Modifier.fillMaxWidth().pressScale(onClick).clip(RoundedCornerShape(24.dp)).background(p.bg()).padding(16.dp),
+        modifier.fillMaxWidth().pressScale(onClick).clip(RoundedCornerShape(24.dp)).background(p.bg()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

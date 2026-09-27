@@ -107,7 +107,7 @@ fun MindCoreApp() {
         // Note editor: a note id, or "new:note" / "new:idea".
         var editNote by rememberSaveable { mutableStateOf<String?>(null) }
         val notes = remember(library) { NotesState() }
-        LaunchedEffect(tab, editNote, library) { if (tab == 2 && editNote == null) notes.refresh(library.api) }
+        LaunchedEffect(tab, editNote, library) { if ((tab == 0 || tab == 2) && editNote == null) notes.refresh(library.api) }
         val askState = remember { AskState() }
         // A widget tap can ask to open an item.
         val requested by app.mindcore.Nav.openItem.collectAsState()
@@ -168,6 +168,9 @@ fun MindCoreApp() {
                             onOpenKind = { k -> libraryQuery.clear(); libraryQuery.kinds = setOfNotNull(k); tab = 1 },
                             onCalendar = { showCalendar = true },
                             onGraph = { showGraph = true },
+                            notes = notes,
+                            onOpenNote = { id -> editNote = id },
+                            onSeeNotes = { f -> notes.filter = f; tab = 2 },
                         )
                         tab == 1 -> LibraryScreen(library, libraryQuery, onOpen = { id -> openItem = id })
                         tab == 2 -> NotesScreen(api, notes, onOpen = { id -> editNote = id }, onNew = { k -> editNote = "new:$k" })

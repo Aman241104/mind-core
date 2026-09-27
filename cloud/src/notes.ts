@@ -109,6 +109,49 @@ export async function updateNote(id: string, req: Request, env: Env, ctx: Execut
   return getNote(id, env);
 }
 
+/** Cron: notes in the trash for 30+ days are gone for good (with their search entries and links). */
+export async function purgeTrash(env: Env): Promise<void> {
+  const old = await env.DB.prepare("SELECT id FROM notes WHERE deleted_at < datetime('now', '-30 days') LIMIT 50").all<{ id: string }>();
+  for (const { id } of old.results) {
+    await env.VEC_CHUNKS.deleteByIds(Array.from({ length: 12 }, (_, k) => `n:${id}:${k}`));
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM notes_fts WHERE note_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM note_links WHERE src_id = ? OR dst_id = ?").bind(id, id),
+      env.DB.prepare("DELETE FROM notes WHERE id = ?").bind(id),
+    ]);
+  }
+}
+
+const TASK = /^(\s*[-*] \[)( |x|X)(\]\s?)(.*)$/;
+
+/** Open to-dos across all notes (for the Today screen), oldest note first so nothing gets buried. */
+export async function openTasks(env: Env): Promise<Response> {
+  const rows = await env.DB.prepare(
+    `SELECT id, kind, title, color, body FROM notes WHERE deleted_at IS NULL AND body LIKE '%[ ]%' ORDER BY pinned DESC, updated_at DESC LIMIT 200`,
+  ).all<{ id: string; kind: string; title: string; color: number; body: string }>();
+  const tasks: { note_id: string; note_title: string; kind: string; color: number; line: number; text: string }[] = [];
+  for (const n of rows.results) {
+    n.body.split("\n").forEach((line, i) => {
+      const m = line.match(TASK);
+      if (m && m[2] === " " && m[4].trim()) tasks.push({ note_id: n.id, note_title: n.title, kind: n.kind, color: n.color, line: i, text: m[4].trim() });
+    });
+  }
+  return json({ tasks: tasks.slice(0, 100) });
+}
+
+/** Tick or untick one "- [ ]" line. [text] guards against the note having changed since the list was loaded. */
+export async function setTask(id: string, req: Request, env: Env): Promise<Response> {
+  const b = (await req.json()) as { line?: number; done?: boolean; text?: string };
+  const n = await env.DB.prepare("SELECT body FROM notes WHERE id = ? AND deleted_at IS NULL").bind(id).first<{ body: string }>();
+  if (!n) return json({ error: "no such note" }, 404);
+  const lines = n.body.split("\n");
+  const m = typeof b.line === "number" ? lines[b.line]?.match(TASK) : null;
+  if (!m || (b.text && m[4].trim() !== b.text.trim())) return json({ error: "that note changed; pull to refresh" }, 409);
+  lines[b.line!] = m[1] + (b.done ? "x" : " ") + m[3] + m[4];
+  await env.DB.prepare("UPDATE notes SET body = ?, updated_at = datetime('now') WHERE id = ?").bind(lines.join("\n"), id).run();
+  return json({ ok: true });
+}
+
 /** To the trash (restorable for 30 days); `?restore=1` brings it back. */
 export async function deleteNote(id: string, url: URL, env: Env): Promise<Response> {
   const restore = url.searchParams.get("restore") === "1";

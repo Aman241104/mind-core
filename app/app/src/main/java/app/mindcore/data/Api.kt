@@ -24,6 +24,8 @@ data class NoteSummary(
 )
 /** A link out of a note (or into it, for backlinks). type: mention | related. */
 data class NoteLink(val id: String, val title: String, val kind: String, val type: String, val isItem: Boolean)
+/** One open "- [ ]" line in a note, for Today. */
+data class NoteTask(val noteId: String, val noteTitle: String, val kind: String, val color: Int, val line: Int, val text: String)
 data class NoteDetail(val summary: NoteSummary, val body: String, val links: List<NoteLink>, val backlinks: List<NoteLink>)
 
 data class ApiItem(
@@ -157,6 +159,17 @@ class Api(private val baseUrl: String, private val token: String) {
 
     suspend fun deleteNote(id: String, restore: Boolean = false) {
         call("DELETE", "/v1/notes/$id" + if (restore) "?restore=1" else "")
+    }
+
+    suspend fun tasks(): List<NoteTask> {
+        val t = JSONObject(call("GET", "/v1/tasks")).getJSONArray("tasks")
+        return (0 until t.length()).map { t.getJSONObject(it) }.map {
+            NoteTask(it.getString("note_id"), it.optString("note_title"), it.optString("kind"), it.optInt("color"), it.getInt("line"), it.getString("text"))
+        }
+    }
+
+    suspend fun setTask(t: NoteTask, done: Boolean) {
+        call("POST", "/v1/notes/${t.noteId}/task", JSONObject().put("line", t.line).put("done", done).put("text", t.text))
     }
 
     /** Transcribe + tidy a recording into a new note or idea (takes a few seconds on the server). */

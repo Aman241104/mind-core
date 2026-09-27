@@ -52,7 +52,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
 internal val tabs = listOf(
-    "For You" to Icons.Rounded.Home,
+    "Today" to Icons.Rounded.Home,
     "Library" to Icons.AutoMirrored.Rounded.List,
     "Notes" to Icons.Rounded.EditNote,
     "Ask" to Icons.Rounded.Search,

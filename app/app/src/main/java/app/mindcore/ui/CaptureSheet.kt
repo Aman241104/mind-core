@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -86,6 +87,7 @@ fun CaptureContent(
     var note by remember { mutableStateOf("") }
     var state by remember { mutableStateOf<SaveState>(SaveState.Idle) }
     var voice by remember { mutableStateOf<java.io.File?>(null) }
+    var saveAs by remember { mutableStateOf("save") } // save | note | idea (text only)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris ->
@@ -140,6 +142,13 @@ fun CaptureContent(
             )
         }
 
+        // Just words (no links, pictures or recording)? Keep them as your own note or idea instead.
+        val textOnly = merged.links.isEmpty() && merged.images.isEmpty() && merged.pdfs.isEmpty() && merged.chatExport == null &&
+            voice == null && !merged.text.isNullOrBlank()
+        if (textOnly) {
+            PillTabs(listOf("save" to "Find things in it", "note" to "Note", "idea" to "Idea"), saveAs, { saveAs = it },
+                contentPadding = PaddingValues(0.dp))
+        }
         AnimatedContent(state, label = "save") { s ->
             when (s) {
                 SaveState.Idle, is SaveState.Failed -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -149,7 +158,9 @@ fun CaptureContent(
                             state = SaveState.Saving
                             scope.launch {
                                 state = try {
-                                    SaveState.Done(capturer.save(merged, note, voice).message)
+                                    val r = if (textOnly && saveAs != "save") capturer.saveAsNote(merged.text!!, saveAs)
+                                        else capturer.save(merged, note, voice)
+                                    SaveState.Done(r.message)
                                 } catch (e: Exception) {
                                     SaveState.Failed(e.message ?: "Couldn't save")
                                 }

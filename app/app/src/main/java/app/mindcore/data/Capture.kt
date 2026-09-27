@@ -40,6 +40,16 @@ data class CaptureResult(val saved: Int, val duplicates: Int, val skipped: Int, 
 
 class Capturer(private val context: Context, private val api: Api) {
 
+    /** Plain text straight into a note or idea (no extraction): first short line becomes the title. */
+    suspend fun saveAsNote(text: String, kind: String): CaptureResult {
+        val lines = text.trim().lines()
+        val first = lines.first().trim()
+        val titled = lines.size > 1 && first.length <= 80
+        api.createNote(org.json.JSONObject().put("kind", kind).put("title", if (titled) first else "")
+            .put("body", if (titled) lines.drop(1).joinToString("\n").trim() else text.trim()))
+        return CaptureResult(1, 0, 0, if (kind == "idea") "Saved as an idea" else "Saved as a note")
+    }
+
     suspend fun save(c: Capture, note: String, voice: java.io.File? = null): CaptureResult {
         c.chatExport?.let { return importChat(it) }
         var saved = 0
