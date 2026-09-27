@@ -67,6 +67,7 @@ fun SettingsScreen(
     onChange: ((AppSettings) -> AppSettings) -> Unit,
     updates: UpdateState,
     onOpenGlass: () -> Unit,
+    onOpenBlob: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     LazyColumn(
@@ -244,6 +245,20 @@ fun SettingsScreen(
                     if (updates.checking) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 }
                 updates.release?.let { UpdateBanner(updates, Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) }
+                Divider()
+                Row(
+                    Modifier.fillMaxWidth().clickable(onClick = onOpenBlob).padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    app.mindcore.ui.blob.LotusBlob(app.mindcore.ui.blob.BlobState.Idle, size = 40.dp, onTap = null)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Meet Swan", style = MaterialTheme.typography.titleMedium)
+                        Text("mind-core's mascot and all its moods", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null)
+                }
                 Divider()
                 Info("Glass", "Kyant0/backdrop and its catalog components, Apache License 2.0")
                 Divider()

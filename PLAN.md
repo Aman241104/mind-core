@@ -441,7 +441,7 @@ one strong accent, soft organic card shapes, a floating capsule nav with a promi
 - Light theme (warm paper, pastel cards) and dark theme (near-black, one lotus accent), both first-class.
 - Glass stays for floating chrome; content cards are solid and calm.
 
-### The Lotus blob (our own mascot, not a copy of Bloub/x.ai's avatar)
+### Swan, the Lotus blob (our own mascot, not a copy of Bloub/x.ai's avatar)
 One soft liquid blob in the lotus gradient with eyes, drawn in Compose (no images, no animation library), morphing
 between states that *mean* something:
 | State | When |

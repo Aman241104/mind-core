@@ -97,6 +97,7 @@ fun MindCoreApp() {
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var showSettings by rememberSaveable { mutableStateOf(false) }
         var showGlass by rememberSaveable { mutableStateOf(false) }
+        var showBlob by rememberSaveable { mutableStateOf(false) }
         var openItem by rememberSaveable { mutableStateOf<String?>(null) }
         val libraryQuery = remember { LibraryQuery() }
         var showCapture by rememberSaveable { mutableStateOf(false) }
@@ -107,9 +108,10 @@ fun MindCoreApp() {
         LaunchedEffect(requested) { requested?.let { openItem = it; app.mindcore.Nav.openItem.value = null } }
         val backdrop = rememberLayerBackdrop()
         val haptics = LocalHapticFeedback.current
-        BackHandler(enabled = showSettings || showGlass || showCalendar || openItem != null) {
+        BackHandler(enabled = showSettings || showGlass || showBlob || showCalendar || openItem != null) {
             when {
                 openItem != null -> openItem = null
+                showBlob -> showBlob = false
                 showCalendar -> showCalendar = false
                 showGlass -> showGlass = false
                 else -> showSettings = false
@@ -129,7 +131,8 @@ fun MindCoreApp() {
                             onChange = { g -> update { it.copy(glass = g) } },
                             onBack = { showGlass = false },
                         )
-                        showSettings -> SettingsScreen(settings, update, updates, onOpenGlass = { showGlass = true }) { showSettings = false }
+                        showBlob -> app.mindcore.ui.blob.BlobGallery { showBlob = false }
+                        showSettings -> SettingsScreen(settings, update, updates, onOpenGlass = { showGlass = true }, onOpenBlob = { showBlob = true }) { showSettings = false }
                         itemId != null && api != null -> ItemScreen(
                             id = itemId, api = api,
                             onBack = { openItem = null },
@@ -149,7 +152,7 @@ fun MindCoreApp() {
                         else -> AskScreen(askState, library.api, settings.research, onOpenItem = { id -> openItem = id })
                     }
                 }
-                if (!showSettings && !showGlass && !showCalendar && openItem == null) {
+                if (!showSettings && !showGlass && !showBlob && !showCalendar && openItem == null) {
                     // Pass a lambda that reads the state (not the Int), so the glass puck sees every change.
                     BottomBar(
                         selected = { tab },
