@@ -462,3 +462,18 @@ between states that *mean* something:
 - **P2:** Notes + Ideas (backend tables, editor, inbox), home redesigned as "Today" (ideas, tasks, deadlines, finds).
 - **P3:** Brainstorm boards + auto-connections + graph view + streaming Ask with GraphRAG-lite.
 - **P4:** resurfacing/incubation, tasks from notes into the calendar, flashcards, Obsidian two-way sync.
+
+### Status (end of 2026-09-27)
+- **P1 done.** Lotus Studio design + Swan mascot (0.2.x).
+- **Graph view done** (0.3.0, pulled forward from P3): `/v1/graph`, cron `linkSimilar` (bge-m3 ≥0.72, 4/item,
+  `items.linked_at`), Compose force layout (GraphScreen.kt), For You header button + "See in graph" on items.
+- **P2 mostly done** (0.4.0): Notes tab (NotesScreen.kt), editor (NoteEditor.kt: markdown, tickable checkboxes,
+  [[links]] picker, autosave, stages, colours, trash), Talk it out (voice → tidy note/idea). Installed on the phone.
+- **Next (tomorrow):**
+  1. P2 leftovers: "Today" home (For You → Today: pinned ideas, open tasks, deadlines, fresh finds); trash view
+     + restore; capture sheet / edge drawer "save as note"; note search in Library search.
+  2. Test on the phone: graph (pinch/drag/tap), notes editor, Talk it out; edge drawer pill + handle (task #5).
+  3. P3: brainstorm boards, streaming GraphRAG Ask + faster list answers.
+  4. P4: resurfacing, tasks → calendar, flashcards, Obsidian sync.
+  5. Small: verified repos should use the GitHub description as one-liner.
+
