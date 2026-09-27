@@ -21,6 +21,7 @@ from .fetch import Content, FetchError, fetch
 from .verify import verify_item
 
 SECRETS = Path.home() / "stash" / ".secrets" / "tokens.env"
+OBSIDIAN_EVERY_SECONDS = 300
 HEARTBEAT_SECONDS = 60
 IDLE_SLEEP_SECONDS = 10  # research questions wait on this, so keep it short
 
@@ -138,6 +139,7 @@ def run(once: bool = False, batch: int = 6, max_batches: int | None = None, log=
 
     threading.Thread(target=beat, daemon=True).start()
     done_batches = 0
+    last_obsidian = 0.0
     while not stop and (max_batches is None or done_batches < max_batches):
         # Someone is waiting on research, so it goes before the save backlog.
         q = api.post("/v1/brain/research/claim", {})
@@ -152,6 +154,18 @@ def run(once: bool = False, batch: int = 6, max_batches: int | None = None, log=
             continue
         if once:
             break
+        # Idle: keep the Obsidian vault in step (at most every few minutes).
+        if time.monotonic() - last_obsidian > OBSIDIAN_EVERY_SECONDS:
+            last_obsidian = time.monotonic()
+            try:
+                from .obsidian import VAULT, Sync
+
+                if VAULT.parent.exists():
+                    counts = Sync(api, log=log).run()
+                    if any(counts.values()):
+                        log(f"obsidian: {counts}")
+            except Exception as e:  # never let the vault stop the queue
+                log(f"obsidian sync failed: {e}")
         time.sleep(IDLE_SLEEP_SECONDS)
 
 

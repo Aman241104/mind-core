@@ -155,6 +155,14 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(json.dumps(Api().get("/v1/status"), indent=1))
 
 
+def cmd_obsidian(args: argparse.Namespace) -> None:
+    from .brain import Api
+    from .obsidian import VAULT, Sync
+
+    counts = Sync(Api(), dry_run=args.dry_run).run()
+    print(f"{'(dry run) ' if args.dry_run else ''}{VAULT}: {counts}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="mindcore")
     sub = parser.add_subparsers(required=True)
@@ -182,6 +190,9 @@ def main() -> None:
     p.add_argument("--notes", help="what's new (shown in the update banner)")
     p.add_argument("--minor", action="store_true", help="bump 0.x instead of 0.x.y")
     p.set_defaults(func=cmd_release)
+    p = sub.add_parser("obsidian", help="sync notes (two-way) and saves (one-way) with the Obsidian vault")
+    p.add_argument("--dry-run", action="store_true", help="show what would change, write nothing")
+    p.set_defaults(func=cmd_obsidian)
     p = sub.add_parser("status", help="show API status: laptop, jobs, saves, items")
     p.set_defaults(func=cmd_status)
     args = parser.parse_args()

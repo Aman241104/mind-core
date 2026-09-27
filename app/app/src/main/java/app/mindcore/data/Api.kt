@@ -34,6 +34,8 @@ data class Board(val id: String, val title: String, val cards: List<BoardCard>, 
 
 data class Resurfaced(val type: String, val id: String, val title: String, val kind: String, val subtitle: String?, val reason: String, val color: Int)
 
+data class Flashcard(val id: String, val q: String, val a: String, val sourceType: String, val sourceId: String, val sourceTitle: String)
+
 /** One open "- [ ]" line in a note, for Today. */
 data class NoteTask(val noteId: String, val noteTitle: String, val kind: String, val color: Int, val line: Int, val text: String)
 data class NoteDetail(val summary: NoteSummary, val body: String, val links: List<NoteLink>, val backlinks: List<NoteLink>)
@@ -277,6 +279,24 @@ class Api(private val baseUrl: String, private val token: String) {
                 it.optStringOrNull("subtitle"), it.getString("reason"), it.optInt("color"))
         }
     }
+
+    // ---------- flashcards ----------
+
+    /** Make cards from a note or item (replaces earlier ones from it). Returns how many. */
+    suspend fun makeCards(type: String, id: String): Int =
+        JSONObject(call("POST", "/v1/flashcards", JSONObject().put("type", type).put("id", id))).getInt("made")
+
+    suspend fun dueCards(): List<Flashcard> {
+        val a = JSONObject(call("GET", "/v1/flashcards/due")).getJSONArray("due")
+        return (0 until a.length()).map { a.getJSONObject(it) }.map {
+            Flashcard(it.getString("id"), it.getString("q"), it.getString("a"), it.getString("source_type"), it.getString("source_id"),
+                it.optString("source_title"))
+        }
+    }
+
+    /** grade: again | hard | good | easy. Returns the next due date. */
+    suspend fun reviewCard(id: String, grade: String): String =
+        JSONObject(call("POST", "/v1/flashcards/$id/review", JSONObject().put("grade", grade))).getString("due")
 
     suspend fun tasks(): List<NoteTask> {
         val t = JSONObject(call("GET", "/v1/tasks")).getJSONArray("tasks")

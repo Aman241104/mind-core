@@ -107,6 +107,7 @@ fun MindCoreApp() {
         // Note editor: a note id, or "new:note" / "new:idea".
         var editNote by rememberSaveable { mutableStateOf<String?>(null) }
         var openBoard by rememberSaveable { mutableStateOf<String?>(null) }
+        var showReview by rememberSaveable { mutableStateOf(false) }
         // "note:<id>" opens a note (dated to-dos in Coming up, the calendar and widgets); anything else is an item.
         fun openAny(id: String) { if (id.startsWith("note:")) editNote = id.removePrefix("note:") else openItem = id }
         val notes = remember(library) { NotesState() }
@@ -117,11 +118,12 @@ fun MindCoreApp() {
         LaunchedEffect(requested) { requested?.let { openAny(it); app.mindcore.Nav.openItem.value = null } }
         val backdrop = rememberLayerBackdrop()
         val haptics = LocalHapticFeedback.current
-        BackHandler(enabled = showSettings || showGlass || showBlob || showCalendar || showGraph || openItem != null || editNote != null || openBoard != null) {
+        BackHandler(enabled = showSettings || showGlass || showBlob || showCalendar || showGraph || openItem != null || editNote != null || openBoard != null || showReview) {
             when {
                 openItem != null -> openItem = null
                 editNote != null -> editNote = null
                 openBoard != null -> openBoard = null
+                showReview -> showReview = false
                 showBlob -> showBlob = false
                 showCalendar -> showCalendar = false
                 showGraph -> { showGraph = false; graphFocus = null }
@@ -162,6 +164,8 @@ fun MindCoreApp() {
                             onOpenItem = { id -> openItem = id },
                             onOpenNote = { id -> editNote = id },
                         )
+                        showReview && api != null -> ReviewScreen(api, onBack = { showReview = false },
+                            onOpenSource = { type, id -> if (type == "note") editNote = id else openItem = id })
                         openBoard != null && api != null -> BoardScreen(
                             api = api, boardId = openBoard!!,
                             picks = notes.notes.map { BoardPick("note", it.id, it.title.ifBlank { "Untitled ${it.kind}" }, it.kind) } +
@@ -183,13 +187,14 @@ fun MindCoreApp() {
                             notes = notes,
                             onOpenNote = { id -> editNote = id },
                             onSeeNotes = { f -> notes.filter = f; tab = 2 },
+                            onReview = { showReview = true },
                         )
                         tab == 1 -> LibraryScreen(library, libraryQuery, onOpen = { id -> openItem = id })
                         tab == 2 -> NotesScreen(api, notes, onOpen = { id -> editNote = id }, onNew = { k -> editNote = "new:$k" }, onOpenBoard = { id -> openBoard = id })
                         else -> AskScreen(askState, library.api, settings.research, onOpenItem = { id -> openItem = id }, onOpenNote = { id -> editNote = id })
                     }
                 }
-                if (!showSettings && !showGlass && !showBlob && !showCalendar && !showGraph && openItem == null && editNote == null && openBoard == null) {
+                if (!showSettings && !showGlass && !showBlob && !showCalendar && !showGraph && openItem == null && editNote == null && openBoard == null && !showReview) {
                     // Pass a lambda that reads the state (not the Int), so the glass puck sees every change.
                     BottomBar(
                         selected = { tab },

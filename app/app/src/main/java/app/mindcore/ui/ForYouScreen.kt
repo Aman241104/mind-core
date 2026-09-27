@@ -84,6 +84,7 @@ fun ForYouScreen(
     notes: NotesState = remember { NotesState() },
     onOpenNote: (String) -> Unit = {},
     onSeeNotes: (filter: String) -> Unit = {},
+    onReview: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val items = library.items
@@ -96,8 +97,12 @@ fun ForYouScreen(
     val continuing = remember(items) { items.filter { it.status == "want" || it.status == "trying" }.take(8) }
     val kinds = remember(items) { items.groupingBy { it.kind }.eachCount().entries.sortedByDescending { it.value } }
     var revisit by remember { mutableStateOf<List<app.mindcore.data.Resurfaced>>(emptyList()) }
+    var dueCards by remember { mutableStateOf(0) }
     LaunchedEffect(library.api, library.loading) {
-        if (!library.loading) library.api?.let { api -> runCatching { api.resurface() }.onSuccess { revisit = it } }
+        if (!library.loading) library.api?.let { api ->
+            runCatching { api.resurface() }.onSuccess { revisit = it }
+            runCatching { api.dueCards() }.onSuccess { dueCards = it.size }
+        }
     }
 
     PullToRefreshBox(isRefreshing = library.loading, onRefresh = { scope.launch { library.refresh() } }) {
@@ -132,6 +137,22 @@ fun ForYouScreen(
                 }
             }
 
+            if (dueCards > 0) item {
+                Row(
+                    Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth().pressScale(onReview).clip(RoundedCornerShape(24.dp))
+                        .background(MaterialTheme.colorScheme.inverseSurface).padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    LotusBlob(BlobState.Notify, size = 40.dp, onTap = null)
+                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                        Text("$dueCards ${if (dueCards == 1) "card" else "cards"} to review", style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.inverseOnSurface)
+                        Text("A couple of minutes keeps it from fading", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.7f))
+                    }
+                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, null, tint = MaterialTheme.colorScheme.inverseOnSurface)
+                }
+            }
             if (revisit.isNotEmpty()) {
                 item { SectionHeader("Revisit") }
                 item {

@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Hub
+import androidx.compose.material.icons.rounded.Style
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.CircularProgressIndicator
@@ -230,6 +231,7 @@ fun ItemScreen(id: String, api: Api, onBack: () -> Unit, onOpenItem: (String) ->
                 Text("See in graph", style = MaterialTheme.typography.labelLarge)
             }
         }
+        item { MakeCardsButton(api, "item", id) }
         item { Spacer(Modifier.height(24.dp).windowInsetsBottomHeight(WindowInsets.navigationBars)) }
     }
 }
@@ -320,5 +322,28 @@ private fun Fact(label: String, value: String) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(110.dp))
         Text(value, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/** "Make flashcards" → Swan writes cards from this note or item; they show up in Review on Today. */
+@Composable
+internal fun MakeCardsButton(api: Api, type: String, id: String, color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface) {
+    val scope = rememberCoroutineScope()
+    var state by remember(id) { mutableStateOf("") } // "" | working | message
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).clickable(enabled = state != "working") {
+            state = "working"
+            scope.launch {
+                state = runCatching { api.makeCards(type, id) }.fold(
+                    { n -> "Made $n flashcards. Review them from Today." }, { it.message ?: "Couldn't make cards" })
+            }
+        }.border(1.dp, color.copy(alpha = 0.25f), RoundedCornerShape(50)).padding(14.dp),
+        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (state == "working") app.mindcore.ui.blob.LotusBlob(app.mindcore.ui.blob.BlobState.Thinking, size = 22.dp, onTap = null)
+        else Icon(Icons.Rounded.Style, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(when (state) { "" -> "Make flashcards"; "working" -> "Writing cards…"; else -> state },
+            style = MaterialTheme.typography.labelLarge, color = color)
     }
 }

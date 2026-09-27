@@ -278,6 +278,7 @@ fun NoteEditor(
                         modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp).clickable(indication = null,
                             interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) { editing = true })
                 }
+                noteId?.let { nid -> if (body.text.length > 40) Box(Modifier.padding(top = 24.dp)) { MakeCardsButton(api, "note", nid, ink) } }
                 Connections(links, backlinks, ink, onOpenItem = { i -> scope.launch { save(); onOpenItem(i) } },
                     onOpenNote = { n -> scope.launch { save(); onOpenNote(n) } })
                 Spacer(Modifier.padding(bottom = 90.dp))

@@ -6,6 +6,7 @@ import { addItemVoice, isOwnAudio, transcribe } from "./voice.ts";
 import { backfillDeadlines, calendar, putDeadline, researchDeadline, upcoming } from "./deadlines.ts";
 import { graph, linkSimilar } from "./graph.ts";
 import { resurface } from "./resurface.ts";
+import { dueCards, makeCards, reviewCard } from "./flashcards.ts";
 import { createBoard, deleteBoard, getBoard, listBoards, saveBoard, suggestCards } from "./boards.ts";
 import { createNote, deleteNote, getNote, listNotes, noteFromVoice, brainstorm, openTasks, purgeTrash, setTask, updateNote } from "./notes.ts";
 import { ask, claimResearch, createResearch, finishResearch, getResearch, indexSaves, reindex } from "./ask.ts";
@@ -82,6 +83,10 @@ export default {
       if (note && req.method === "DELETE") return await deleteNote(note[1], url, env);
       if (path === "/v1/graph" && req.method === "GET") return await graph(env);
       if (path === "/v1/resurface" && req.method === "GET") return await resurface(env);
+      if (path === "/v1/flashcards" && req.method === "POST") return await makeCards(req, env);
+      if (path === "/v1/flashcards/due" && req.method === "GET") return await dueCards(env);
+      const card = path.match(/^\/v1\/flashcards\/([0-9a-f]{16})\/review$/);
+      if (card && req.method === "POST") return await reviewCard(card[1], req, env);
       if (path === "/v1/boards" && req.method === "GET") return await listBoards(env);
       if (path === "/v1/boards" && req.method === "POST") return await createBoard(req, env);
       const board = path.match(/^\/v1\/boards\/([0-9a-f]{16})(\/suggest)?$/);
