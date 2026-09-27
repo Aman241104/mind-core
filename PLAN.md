@@ -402,3 +402,63 @@ Implementation guidance (Android Glance docs + 2026 write-ups): Jetpack Glance; 
 | Daily pick | Readwise daily review | one item per day to try, Open / Done / Skip |
 
 Data flow: app refresh / capture / 1-hourly worker → `WidgetSnapshot` (JSON in app storage) → `updateAll()` → widgets render from the snapshot.
+
+---
+
+## 16. v2: the ideas + notes app (researched 2026-09-27)
+
+**Direction:** mind-core becomes the place for *all* thinking, not only saved reels: fast capture (Keep), AI that
+organizes and links by itself (Mem, Tana), a thinking partner (Reflect), visual brainstorming (Heptabase, Miro),
+and resurfacing so ideas don't die (Readwise). Everything built so far stays: reel/screenshot/PDF/video capture,
+extraction + fact-checking, Ask + research, calendar + deadlines, widgets, edge drawer, voice, glass.
+
+Research: the category split into lanes (canvas-first, database-first, text-stream, daily-notes graph, local-first,
+structured PKM); nobody combines fast capture + auto-linking + brainstorming + resurfacing on the phone. The 2026
+shift is from manual linking to AI-surfaced connections; GraphRAG (retrieval that follows links) beats plain vector RAG
+for "how do my ideas connect" questions.
+
+### New things you can make
+| Thing | What it is |
+|---|---|
+| **Note** | Your own writing: headings, checklists, bullets, quotes, code, images, voice (transcribed). `[[links]]` to notes and saved items; backlinks shown automatically. |
+| **Idea** | A one-line spark, captured in 2 seconds (widget, edge drawer, voice). Grows: spark → growing → ready → done/parked. |
+| **Board** | A brainstorm space: a topic in the middle, ideas/notes/items around it, AI-suggested angles you accept or dismiss. |
+| (existing) **Item** | Repos, tools, courses, jobs, videos, books pulled out of what you saved. |
+
+### AI that does the boring parts
+- **Auto-connections:** every note/idea gets "Connected to" chips (meaning similarity + shared entities), plus a graph view.
+- **Brainstorm engine:** pick a topic → angles from your own library (RAG) + web research + methods (How might we,
+  SCAMPER, first principles, "what would make this 10×"), shown as a radial mind map; keep what's good.
+- **Idea incubation:** old ideas resurface on a schedule with "anything new?"; new saves that relate to a parked idea ping it.
+- **Clean-up:** voice rambles → tidy note; notes → checklist tasks with dates (into the calendar); note → flashcards.
+- **Ask everything:** notes + ideas + items, GraphRAG-lite (hybrid search, then follow links one hop), streaming
+  answers so they start in ~1 s, and a faster model for list questions (the list answers took 20–35 s in testing).
+
+### Design system v2 ("Lotus Studio")
+From the two references: huge bold headlines, pill tabs with counts, circular icon buttons, big-radius hero cards in
+one strong accent, soft organic card shapes, a floating capsule nav with a prominent center + and mic.
+- Type: a characterful display face (Bricolage Grotesque) + a clean text face (Figtree), Google downloadable fonts.
+- Light theme (warm paper, pastel cards) and dark theme (near-black, one lotus accent), both first-class.
+- Glass stays for floating chrome; content cards are solid and calm.
+
+### The Lotus blob (our own mascot, not a copy of Bloub/x.ai's avatar)
+One soft liquid blob in the lotus gradient with eyes, drawn in Compose (no images, no animation library), morphing
+between states that *mean* something:
+| State | When |
+|---|---|
+| idle (breathing, blinking) | calm screens, empty states |
+| listening (pulses with your voice) | recording a voice note |
+| thinking (three bouncing dots) | Ask / brainstorm working |
+| orbit (dots circling) | laptop processing saves |
+| searching (eyes scanning, comet) | research online |
+| burst (happy squish + sparks) | saved, done |
+| alert (!) | deadline soon, something failed |
+| notification (badge dot) | new finds / resurfaced idea |
+| sleep (closed eyes, zzz) | laptop offline, night |
+| wink | tap it |
+
+### Phases
+- **P1:** design system v2 (fonts, light+dark tokens, components) + the Lotus blob in loading/empty/Ask/voice/status/save.
+- **P2:** Notes + Ideas (backend tables, editor, inbox), home redesigned as "Today" (ideas, tasks, deadlines, finds).
+- **P3:** Brainstorm boards + auto-connections + graph view + streaming Ask with GraphRAG-lite.
+- **P4:** resurfacing/incubation, tasks from notes into the calendar, flashcards, Obsidian two-way sync.
