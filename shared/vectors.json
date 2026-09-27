@@ -123,5 +123,32 @@
    "",
    "skip"
   ]
+ ],
+ "whatsapp": [
+  {
+   "chat": "[3/21/26, 11:13:43 AM] You: ‎<image omitted>\n[3/23/26, 9:30:52 PM] You: [Forwarded] Check this repo\nhttps://github.com/karakeep-app/karakeep\n[9/27/26, 10:49:55 AM] You: https://www.instagram.com/reel/Ddw0QuEu1Rq/?stkn=OWdsenp5YnF0aHhn\n",
+   "links": [
+    [
+     "https://github.com/karakeep-app/karakeep",
+     "Check this repo",
+     "2026-03-23T21:30:52"
+    ],
+    [
+     "https://www.instagram.com/reel/Ddw0QuEu1Rq/?stkn=OWdsenp5YnF0aHhn",
+     null,
+     "2026-09-27T10:49:55"
+    ]
+   ]
+  },
+  {
+   "chat": "21/03/2026, 11:13 pm - You: IMG-20260321-WA0001.jpg (file attached)\n23/03/2026, 9:30 am - You: https://youtu.be/abc123?si=xyz\nsecond line of the same message\n",
+   "links": [
+    [
+     "https://youtu.be/abc123?si=xyz",
+     null,
+     "2026-03-23T09:30:00"
+    ]
+   ]
+  }
  ]
 }

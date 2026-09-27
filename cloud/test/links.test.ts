@@ -13,3 +13,11 @@ test("normalize matches shared vectors", () => {
 test("shelf matches shared vectors", () => {
   for (const [url, note, title, want] of v.shelf) assert.equal(triage(url, note, title).shelf, want, url);
 });
+
+import { chatLinks } from "../src/whatsapp.ts";
+
+test("whatsapp parsing matches shared vectors", () => {
+  for (const c of v.whatsapp) {
+    assert.deepEqual(chatLinks(c.chat).map((l) => [l.url, l.title, l.savedAt]), c.links);
+  }
+});

@@ -1,5 +1,6 @@
 // mind-core API on Cloudflare Workers: saves in, items out, jobs for the laptop brain, hybrid search.
 import { kindHint, normalizeUrl, shortHash, triage } from "./links.ts";
+import { chatLinks } from "./whatsapp.ts";
 
 export interface Env {
   DB: D1Database;
@@ -7,6 +8,7 @@ export interface Env {
   AI: Ai;
   API_TOKEN: string; // the phone
   BRAIN_TOKEN: string; // the laptop
+  CLOUDINARY_URL?: string; // cloudinary://key:secret@cloud, for screenshot uploads
 }
 
 const EMBED_MODEL = "@cf/baai/bge-m3"; // multilingual (Hindi/Hinglish), 1024 dims
@@ -41,6 +43,8 @@ export default {
       if (!authorized(req, env, "phone")) return bad("unauthorized", 401);
       if (path === "/v1/saves" && req.method === "POST") return await addSaves(req, env);
       if (path === "/v1/saves" && req.method === "GET") return await listSaves(url, env);
+      if (path === "/v1/import/whatsapp" && req.method === "POST") return await importWhatsapp(req, env);
+      if (path === "/v1/uploads/sign" && req.method === "POST") return await signUpload(env);
       if (path === "/v1/items" && req.method === "GET") return await listItems(url, env);
       const itemMatch = path.match(/^\/v1\/items\/([0-9a-f]{16})$/);
       if (itemMatch && req.method === "GET") return await getItem(itemMatch[1], env);
@@ -64,41 +68,103 @@ export default {
 
 // ---------- saves ----------
 
-interface SaveIn { url?: string; text?: string; note?: string; title?: string; source?: string; saved_at?: string }
+interface SaveIn {
+  url?: string; image_url?: string; text?: string; note?: string; title?: string; source?: string; saved_at?: string;
+}
+type Counts = { added: number; duplicate: number; skipped: number; queued: number; invalid: number };
 
 async function addSaves(req: Request, env: Env): Promise<Response> {
   const body = (await req.json()) as { saves?: SaveIn[] };
   const saves = body.saves ?? [];
   if (!Array.isArray(saves) || saves.length === 0 || saves.length > 500) return bad("send 1-500 saves");
-  const counts = { added: 0, duplicate: 0, skipped: 0, queued: 0, invalid: 0 };
+  return json(await ingest(env, saves));
+}
+
+/** A link, a screenshot (already on Cloudinary) or a plain note. Duplicates are ignored. */
+async function ingest(env: Env, saves: SaveIn[]): Promise<Counts> {
+  const counts: Counts = { added: 0, duplicate: 0, skipped: 0, queued: 0, invalid: 0 };
   const statements: D1PreparedStatement[] = [];
+  const seen = new Set<string>();
   for (const s of saves) {
-    if (!s.url) { counts.invalid++; continue; } // text/image saves arrive in M2
-    let norm: string;
-    try { norm = normalizeUrl(s.url); } catch { counts.invalid++; continue; }
-    const t = triage(norm, s.note ?? "", s.title ?? "");
-    if (t.shelf === "skip") { counts.skipped++; continue; }
-    const id = await shortHash(norm);
-    const kind = kindHint(norm);
-    const exists = await env.DB.prepare("SELECT 1 FROM saves WHERE id = ?").bind(id).first();
-    if (exists) { counts.duplicate++; continue; }
+    let row: { id: string; url: string | null; host: string | null; kind: string; shelf: string; mine: boolean; note: string | null };
+    if (s.url) {
+      let norm: string;
+      try { norm = normalizeUrl(s.url); } catch { counts.invalid++; continue; }
+      const t = triage(norm, s.note ?? "", s.title ?? "");
+      if (t.shelf === "skip") { counts.skipped++; continue; }
+      row = { id: await shortHash(norm), url: norm, host: new URL(norm).hostname, kind: kindHint(norm),
+        shelf: t.shelf, mine: t.mine, note: s.note ?? null };
+    } else if (s.image_url) {
+      // Only images in your own Cloudinary account, so nobody can make the laptop fetch arbitrary URLs.
+      const cloud = cloudinary(env)?.cloud;
+      if (!cloud || !s.image_url.startsWith(`https://res.cloudinary.com/${cloud}/`)) { counts.invalid++; continue; }
+      row = { id: await shortHash(s.image_url), url: s.image_url, host: "res.cloudinary.com", kind: "image",
+        shelf: "unsure", mine: false, note: s.note ?? null };
+    } else if (s.text?.trim()) {
+      row = { id: await shortHash("text:" + s.text.trim()), url: null, host: null, kind: "text",
+        shelf: "unsure", mine: false, note: s.text.trim().slice(0, 4000) };
+    } else { counts.invalid++; continue; }
+
+    if (seen.has(row.id) || (await env.DB.prepare("SELECT 1 FROM saves WHERE id = ?").bind(row.id).first())) {
+      counts.duplicate++;
+      continue;
+    }
+    seen.add(row.id);
     counts.added++;
     // Work links are just filed; learning and unsure ones get processed by the brain.
-    const process = t.shelf !== "work";
+    const process = row.shelf !== "work";
     statements.push(
       env.DB.prepare(
         `INSERT INTO saves (id, url, raw_url, host, kind_hint, shelf, mine, title, note, source, saved_at, status)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(id, norm, s.url, new URL(norm).hostname, kind, t.shelf, t.mine ? 1 : 0, s.title ?? null, s.note ?? null,
-        s.source ?? "share", s.saved_at ?? new Date().toISOString(), process ? "queued" : "done"),
+      ).bind(row.id, row.url, s.url ?? s.image_url ?? null, row.host, row.kind, row.shelf, row.mine ? 1 : 0,
+        s.title ?? null, row.note, s.source ?? "share", s.saved_at ?? new Date().toISOString(), process ? "queued" : "done"),
     );
     if (process) {
       counts.queued++;
-      statements.push(env.DB.prepare("INSERT INTO jobs (save_id, type) VALUES (?, ?)").bind(id, kind));
+      statements.push(env.DB.prepare("INSERT INTO jobs (save_id, type) VALUES (?, ?)").bind(row.id, row.kind));
     }
   }
   if (statements.length) await env.DB.batch(statements);
-  return json(counts);
+  return counts;
+}
+
+/** A WhatsApp "Export chat" .txt, sent by the phone. Whole messages that are skip-lists are dropped. */
+async function importWhatsapp(req: Request, env: Env): Promise<Response> {
+  const text = await req.text();
+  if (!text || text.length > 5_000_000) return bad("send the chat .txt (max 5 MB)");
+  const links = chatLinks(text);
+  const skipMsgs = new Set(links.filter((l) => {
+    try { return triage(normalizeUrl(l.url), l.note, l.title ?? "").shelf === "skip"; } catch { return false; }
+  }).map((l) => l.msgIndex));
+  const saves: SaveIn[] = links.filter((l) => !skipMsgs.has(l.msgIndex))
+    .map((l) => ({ url: l.url, note: l.note, title: l.title ?? undefined, source: "whatsapp", saved_at: l.savedAt }));
+  const total: Counts = { added: 0, duplicate: 0, skipped: skipMsgs.size ? links.length - saves.length : 0, queued: 0, invalid: 0 };
+  for (let i = 0; i < saves.length; i += 200) {
+    const c = await ingest(env, saves.slice(i, i + 200));
+    for (const k of Object.keys(total) as (keyof Counts)[]) total[k] += c[k];
+  }
+  return json({ found: links.length, ...total });
+}
+
+// ---------- Cloudinary (screenshots) ----------
+
+function cloudinary(env: Env): { cloud: string; key: string; secret: string } | null {
+  const m = env.CLOUDINARY_URL?.match(/^cloudinary:\/\/([^:]+):([^@]+)@(.+)$/);
+  return m ? { key: m[1], secret: m[2], cloud: m[3] } : null;
+}
+
+/** Signed upload params: the phone uploads straight to Cloudinary; the API secret stays here. */
+async function signUpload(env: Env): Promise<Response> {
+  const c = cloudinary(env);
+  if (!c) return bad("screenshots aren't set up yet (CLOUDINARY_URL missing on the server)", 503);
+  const timestamp = Math.floor(Date.now() / 1000);
+  const folder = "mind-core";
+  const toSign = `folder=${folder}&timestamp=${timestamp}${c.secret}`;
+  const digest = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(toSign));
+  const signature = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return json({ cloud_name: c.cloud, api_key: c.key, timestamp, folder, signature,
+    upload_url: `https://api.cloudinary.com/v1_1/${c.cloud}/image/upload` });
 }
 
 async function listSaves(url: URL, env: Env): Promise<Response> {
@@ -179,7 +245,7 @@ async function heartbeat(req: Request, env: Env): Promise<Response> {
 async function claim(req: Request, env: Env): Promise<Response> {
   const body = (await req.json()) as { types?: string[]; limit?: number };
   const limit = Math.min(body.limit ?? 8, 25);
-  const types = body.types?.length ? body.types : ["reel", "post", "page", "github", "chat_share"];
+  const types = body.types?.length ? body.types : ["reel", "post", "page", "github", "chat_share", "image", "text"];
   const placeholders = types.map(() => "?").join(",");
   // One statement, so two workers can't lease the same job.
   const leased = await env.DB.prepare(

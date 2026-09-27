@@ -111,8 +111,24 @@ def fetch_chatgpt_share(url: str) -> Content:
     return Content(caption=title[1] if title else "ChatGPT chat", screen_text="\n\n---\n\n".join(texts)[:20000])
 
 
+def fetch_image(url: str) -> Content:
+    """A screenshot on Cloudinary: download it and read its text."""
+    resp = httpx.get(url, timeout=60, follow_redirects=True)
+    if resp.status_code >= 400:
+        raise FetchError(f"image returned HTTP {resp.status_code}", retry=resp.status_code >= 500)
+    with tempfile.NamedTemporaryFile(suffix=".img") as f:
+        f.write(resp.content)
+        f.flush()
+        out = subprocess.run(["tesseract", f.name, "-", "--psm", "3"], capture_output=True, text=True, timeout=90)
+    return Content(screen_text=re.sub(r"[ \t]+", " ", out.stdout).strip()[:8000])
+
+
 def fetch(save: dict) -> Content:
     kind, url = save["kind_hint"], save["url"]
+    if kind == "text":  # a typed or shared note: the note itself is the content
+        return Content(screen_text=save.get("note") or "")
+    if kind == "image":
+        return fetch_image(url)
     if kind in ("reel", "post"):
         return fetch_video(url) if kind == "reel" or "youtube.com" in url else fetch_post(url)
     if kind == "chat_share":

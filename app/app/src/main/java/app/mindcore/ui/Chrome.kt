@@ -129,6 +129,7 @@ internal fun BottomBar(
     style: GlassStyle,
     dark: Boolean,
     modifier: Modifier,
+    onCapture: () -> Unit = {},
 ) {
     val container = MaterialTheme.colorScheme.surfaceContainerHigh
     val glassLook = style.look(dark)
@@ -163,13 +164,13 @@ internal fun BottomBar(
             }
         }
         Spacer(Modifier.width(12.dp))
-        CaptureButton(backdrop, buttonLook, contentColor)
+        CaptureButton(backdrop, buttonLook, contentColor, onCapture)
     }
 }
 
-/** Round glass "+" beside the tabs, like Convx's search button. Opens the capture sheet (M2). */
+/** Round glass "+" beside the tabs, like Convx's search button. Opens the capture sheet. */
 @Composable
-private fun CaptureButton(backdrop: Backdrop, look: GlassLook, contentColor: () -> Color) {
+private fun CaptureButton(backdrop: Backdrop, look: GlassLook, contentColor: () -> Color, onClick: () -> Unit) {
     Box(
         Modifier
             .size(64.dp)
@@ -185,7 +186,7 @@ private fun CaptureButton(backdrop: Backdrop, look: GlassLook, contentColor: () 
                 highlight = { look.highlight },
                 onDrawSurface = { drawRect(look.surface) },
             )
-            .clickable { },
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(Icons.Rounded.Add, contentDescription = "Capture", tint = contentColor(), modifier = Modifier.size(30.dp))

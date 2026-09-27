@@ -29,6 +29,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -52,6 +54,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.mindcore.data.Api
+import app.mindcore.data.Capture
+import app.mindcore.data.Capturer
 import app.mindcore.data.Library
 import app.mindcore.settings.AppSettings
 import app.mindcore.settings.SettingsStore
@@ -61,6 +65,7 @@ import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MindCoreApp() {
     val context = LocalContext.current
@@ -82,6 +87,7 @@ fun MindCoreApp() {
         var showGlass by rememberSaveable { mutableStateOf(false) }
         var openItem by rememberSaveable { mutableStateOf<String?>(null) }
         var libraryKind by rememberSaveable { mutableStateOf<String?>(null) }
+        var showCapture by rememberSaveable { mutableStateOf(false) }
         val backdrop = rememberLayerBackdrop()
         val haptics = LocalHapticFeedback.current
         BackHandler(enabled = showSettings || showGlass || openItem != null) {
@@ -134,7 +140,20 @@ fun MindCoreApp() {
                         style = settings.glass,
                         dark = dark,
                         modifier = Modifier.align(Alignment.BottomCenter),
+                        onCapture = { showCapture = true },
                     )
+                }
+                if (showCapture) {
+                    val capturer = remember(library) { library.api?.let { Capturer(context.applicationContext, it) } }
+                    ModalBottomSheet(
+                        onDismissRequest = { showCapture = false },
+                        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                    ) {
+                        CaptureContent(Capture(), capturer, editable = true) {
+                            showCapture = false
+                            scope.launch { library.refresh() }
+                        }
+                    }
                 }
             }
         }

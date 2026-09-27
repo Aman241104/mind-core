@@ -60,3 +60,13 @@ def test_shared_vectors():
     for url, note, title, want in v["shelf"]:
         link = Link(url, url, url.split("/")[2], datetime(2026, 1, 1), note, title or None, False, 0)
         assert triage(link).shelf == want, url
+
+
+def test_shared_whatsapp_vectors():
+    import json
+    from pathlib import Path
+
+    v = json.loads((Path(__file__).parents[2] / "shared" / "vectors.json").read_text())
+    for case in v["whatsapp"]:
+        links = extract_links(parse_messages(case["chat"]))
+        assert [[l.raw, l.title, l.when.isoformat()] for l in links] == case["links"]
