@@ -215,7 +215,7 @@ Be concise: short paragraphs or a short list. Plain words, no marketing tone, no
   ];
   if (body.stream) return streamAnswer(env, messages, top);
   const out = (await env.AI.run(ANSWER_MODEL, {
-    messages, max_tokens: 900, reasoning: { effort: "low" },
+    messages, max_tokens: 2000, reasoning: { effort: "low" },
   } as never)) as { response?: string; choices?: { message: { content: string } }[] };
   let answer = (out.response ?? out.choices?.[0]?.message?.content ?? "").trim();
   // gpt-oss sometimes uses 【1】; normalize to [1].
@@ -252,7 +252,7 @@ function streamAnswer(env: Env, messages: unknown[], top: Candidate[]): Response
     try {
       await send({ type: "sources", sources: top.map((c, i) => ({ ...c.source, n: i + 1 })) });
       const stream = (await env.AI.run(ANSWER_MODEL, {
-        messages, max_tokens: 900, stream: true, reasoning: { effort: "low" },
+        messages, max_tokens: 2000, stream: true, reasoning: { effort: "low" },
       } as never)) as unknown as ReadableStream<Uint8Array>;
       const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
       let buf = "";

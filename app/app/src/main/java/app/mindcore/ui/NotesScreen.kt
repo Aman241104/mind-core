@@ -72,12 +72,14 @@ class NotesState {
     var stage by mutableStateOf<String?>(null)
     var trash by mutableStateOf<List<NoteSummary>>(emptyList())
     var tasks by mutableStateOf<List<app.mindcore.data.NoteTask>>(emptyList())
+    var boards by mutableStateOf<List<app.mindcore.data.BoardSummary>>(emptyList())
 
     suspend fun refresh(api: Api?) {
         api ?: return
         loading = true
         runCatching { api.notes() }.onSuccess { notes = it; error = null; loaded = true }.onFailure { error = it.message }
         runCatching { api.tasks() }.onSuccess { tasks = it }
+        runCatching { api.boards() }.onSuccess { boards = it }
         if (filter == "trash") runCatching { api.notes(trash = true) }.onSuccess { trash = it }
         loading = false
     }
@@ -104,7 +106,7 @@ fun Pastel.ink(): Color = if (MaterialTheme.colorScheme.surface.luminance() < 0.
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotesScreen(api: Api?, state: NotesState, onOpen: (String) -> Unit, onNew: (kind: String) -> Unit) {
+fun NotesScreen(api: Api?, state: NotesState, onOpen: (String) -> Unit, onNew: (kind: String) -> Unit, onOpenBoard: (String) -> Unit = {}) {
     val scope = rememberCoroutineScope()
     var talking by remember { mutableStateOf(false) }
     val all = state.notes
@@ -120,6 +122,7 @@ fun NotesScreen(api: Api?, state: NotesState, onOpen: (String) -> Unit, onNew: (
     val counts = mapOf(
         "all" to all.size, "note" to all.count { it.kind == "note" }, "idea" to all.count { it.kind == "idea" },
         "todo" to all.count { it.tasks > it.tasksDone }, "pinned" to all.count { it.pinned || it.favorite },
+        "boards" to state.boards.size,
     )
 
     PullToRefreshBox(isRefreshing = state.loading && state.loaded, onRefresh = { scope.launch { state.refresh(api) } }) {
@@ -147,7 +150,7 @@ fun NotesScreen(api: Api?, state: NotesState, onOpen: (String) -> Unit, onNew: (
             item(span = StaggeredGridItemSpan.FullLine) {
                 Column(Modifier.animateContentSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     PillTabs(
-                        listOf("all" to "All", "idea" to "Ideas", "note" to "Notes", "todo" to "To-do", "pinned" to "Pinned", "trash" to "Trash"),
+                        listOf("all" to "All", "idea" to "Ideas", "note" to "Notes", "boards" to "Boards", "todo" to "To-do", "pinned" to "Pinned", "trash" to "Trash"),
                         state.filter, {
                             state.filter = it; if (it != "idea") state.stage = null
                             if (it == "trash" && api != null) scope.launch { runCatching { api.notes(trash = true) }.onSuccess { t -> state.trash = t } }
@@ -166,6 +169,36 @@ fun NotesScreen(api: Api?, state: NotesState, onOpen: (String) -> Unit, onNew: (
                 !state.loaded && state.error != null -> item(span = StaggeredGridItemSpan.FullLine) { Empty(state.error!!) }
                 !state.loaded -> item(span = StaggeredGridItemSpan.FullLine) {
                     Box(Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) { LotusBlob(BlobState.Thinking, size = 64.dp, onTap = null) }
+                }
+                state.filter == "boards" -> {
+                    item(span = StaggeredGridItemSpan.FullLine) {
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.inverseSurface)
+                                .pressScale {
+                                    scope.launch { runCatching { api!!.createBoard("") }.onSuccess { b -> onOpenBoard(b.id) }.onFailure { state.error = it.message } }
+                                }.padding(18.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            LotusBlob(BlobState.Idle, size = 36.dp, onTap = null)
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text("New board", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.inverseOnSurface)
+                                Text("A canvas for a topic: stickies, saves, notes, and Swan's ideas", style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.75f))
+                            }
+                        }
+                    }
+                    items(state.boards, key = { "b" + it.id }) { b ->
+                        val p = pastelFor(b.title.length)
+                        Column(
+                            Modifier.fillMaxWidth().pressScale { onOpenBoard(b.id) }.clip(RoundedCornerShape(24.dp)).background(p.bg()).padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text("Board", style = MaterialTheme.typography.labelMedium, color = p.ink().copy(alpha = 0.7f))
+                            Text(b.title.ifBlank { "Untitled board" }, style = MaterialTheme.typography.titleLarge, color = p.ink(), maxLines = 3, overflow = TextOverflow.Ellipsis)
+                            Text("${b.cards} cards · ${ago(b.updatedAt)}", style = MaterialTheme.typography.labelSmall, color = p.ink().copy(alpha = 0.7f))
+                        }
+                    }
                 }
                 state.filter == "trash" -> if (state.trash.isEmpty()) item(span = StaggeredGridItemSpan.FullLine) {
                     Empty("Trash is empty. Deleted notes stay here for 30 days.")

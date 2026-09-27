@@ -106,18 +106,20 @@ fun MindCoreApp() {
         var graphFocus by rememberSaveable { mutableStateOf<String?>(null) }
         // Note editor: a note id, or "new:note" / "new:idea".
         var editNote by rememberSaveable { mutableStateOf<String?>(null) }
+        var openBoard by rememberSaveable { mutableStateOf<String?>(null) }
         val notes = remember(library) { NotesState() }
-        LaunchedEffect(tab, editNote, library) { if ((tab == 0 || tab == 2) && editNote == null) notes.refresh(library.api) }
+        LaunchedEffect(tab, editNote, openBoard, library) { if ((tab == 0 || tab == 2) && editNote == null && openBoard == null) notes.refresh(library.api) }
         val askState = remember { AskState() }
         // A widget tap can ask to open an item.
         val requested by app.mindcore.Nav.openItem.collectAsState()
         LaunchedEffect(requested) { requested?.let { openItem = it; app.mindcore.Nav.openItem.value = null } }
         val backdrop = rememberLayerBackdrop()
         val haptics = LocalHapticFeedback.current
-        BackHandler(enabled = showSettings || showGlass || showBlob || showCalendar || showGraph || openItem != null || editNote != null) {
+        BackHandler(enabled = showSettings || showGlass || showBlob || showCalendar || showGraph || openItem != null || editNote != null || openBoard != null) {
             when {
                 openItem != null -> openItem = null
                 editNote != null -> editNote = null
+                openBoard != null -> openBoard = null
                 showBlob -> showBlob = false
                 showCalendar -> showCalendar = false
                 showGraph -> { showGraph = false; graphFocus = null }
@@ -158,6 +160,14 @@ fun MindCoreApp() {
                             onOpenItem = { id -> openItem = id },
                             onOpenNote = { id -> editNote = id },
                         )
+                        openBoard != null && api != null -> BoardScreen(
+                            api = api, boardId = openBoard!!,
+                            picks = notes.notes.map { BoardPick("note", it.id, it.title.ifBlank { "Untitled ${it.kind}" }, it.kind) } +
+                                library.items.map { BoardPick("item", it.id, it.name, it.kind) },
+                            onBack = { openBoard = null },
+                            onOpenItem = { id -> openItem = id },
+                            onOpenNote = { id -> editNote = id },
+                        )
                         showGraph && api != null -> GraphScreen(api, onBack = { showGraph = false; graphFocus = null }, onOpen = { id -> openItem = id }, focus = graphFocus, onOpenNote = { id -> editNote = id })
                         showCalendar && api != null -> CalendarScreen(api, onBack = { showCalendar = false }, onOpen = { id -> openItem = id })
                         tab == 0 -> ForYouScreen(
@@ -173,11 +183,11 @@ fun MindCoreApp() {
                             onSeeNotes = { f -> notes.filter = f; tab = 2 },
                         )
                         tab == 1 -> LibraryScreen(library, libraryQuery, onOpen = { id -> openItem = id })
-                        tab == 2 -> NotesScreen(api, notes, onOpen = { id -> editNote = id }, onNew = { k -> editNote = "new:$k" })
+                        tab == 2 -> NotesScreen(api, notes, onOpen = { id -> editNote = id }, onNew = { k -> editNote = "new:$k" }, onOpenBoard = { id -> openBoard = id })
                         else -> AskScreen(askState, library.api, settings.research, onOpenItem = { id -> openItem = id }, onOpenNote = { id -> editNote = id })
                     }
                 }
-                if (!showSettings && !showGlass && !showBlob && !showCalendar && !showGraph && openItem == null && editNote == null) {
+                if (!showSettings && !showGlass && !showBlob && !showCalendar && !showGraph && openItem == null && editNote == null && openBoard == null) {
                     // Pass a lambda that reads the state (not the Int), so the glass puck sees every change.
                     BottomBar(
                         selected = { tab },

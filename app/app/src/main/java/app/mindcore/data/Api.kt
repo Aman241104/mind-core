@@ -24,6 +24,14 @@ data class NoteSummary(
 )
 /** A link out of a note (or into it, for backlinks). type: mention | related. */
 data class NoteLink(val id: String, val title: String, val kind: String, val type: String, val isItem: Boolean)
+data class BoardSummary(val id: String, val title: String, val cards: Int, val updatedAt: String)
+/** type: text (a sticky) | note | item. title/kind/subtitle come from the note or item it points at. */
+data class BoardCard(
+    val id: String, val type: String, val refId: String?, val text: String, val x: Float, val y: Float, val color: Int,
+    val title: String? = null, val kind: String? = null, val subtitle: String? = null,
+)
+data class Board(val id: String, val title: String, val cards: List<BoardCard>, val edges: List<Pair<String, String>>)
+
 /** One open "- [ ]" line in a note, for Today. */
 data class NoteTask(val noteId: String, val noteTitle: String, val kind: String, val color: Int, val line: Int, val text: String)
 data class NoteDetail(val summary: NoteSummary, val body: String, val links: List<NoteLink>, val backlinks: List<NoteLink>)
@@ -218,6 +226,46 @@ class Api(private val baseUrl: String, private val token: String) {
     /** Swan's suggestions for a note, as markdown. mode: expand | questions | next | connect */
     suspend fun brainstorm(noteId: String, mode: String): String =
         JSONObject(call("POST", "/v1/notes/$noteId/brainstorm", JSONObject().put("mode", mode))).getString("text")
+
+    // ---------- boards ----------
+
+    suspend fun boards(): List<BoardSummary> {
+        val a = JSONArray(call("GET", "/v1/boards"))
+        return (0 until a.length()).map { a.getJSONObject(it) }.map { BoardSummary(it.getString("id"), it.optString("title"), it.optInt("cards"), it.optString("updated_at")) }
+    }
+
+    suspend fun board(id: String): Board {
+        val o = JSONObject(call("GET", "/v1/boards/$id"))
+        val c = o.getJSONArray("cards"); val e = o.getJSONArray("edges")
+        return Board(
+            o.getString("id"), o.optString("title"),
+            (0 until c.length()).map { c.getJSONObject(it) }.map {
+                BoardCard(it.getString("id"), it.getString("type"), it.optStringOrNull("ref_id"), it.optString("text"),
+                    it.optDouble("x", 0.0).toFloat(), it.optDouble("y", 0.0).toFloat(), it.optInt("color"),
+                    it.optStringOrNull("title"), it.optStringOrNull("kind"), it.optStringOrNull("subtitle"))
+            },
+            (0 until e.length()).map { e.getJSONObject(it) }.map { it.getString("a") to it.getString("b") },
+        )
+    }
+
+    suspend fun createBoard(title: String): Board = JSONObject(call("POST", "/v1/boards", JSONObject().put("title", title))).let { board(it.getString("id")) }
+
+    suspend fun saveBoard(id: String, title: String, cards: List<BoardCard>, edges: List<Pair<String, String>>) {
+        val c = JSONArray(); cards.forEach {
+            c.put(JSONObject().put("id", it.id).put("type", it.type).put("ref_id", it.refId ?: JSONObject.NULL).put("text", it.text)
+                .put("x", it.x.toDouble()).put("y", it.y.toDouble()).put("color", it.color))
+        }
+        val e = JSONArray(); edges.forEach { (a, b) -> e.put(JSONObject().put("a", a).put("b", b)) }
+        call("PUT", "/v1/boards/$id", JSONObject().put("title", title).put("cards", c).put("edges", e))
+    }
+
+    suspend fun deleteBoard(id: String) { call("DELETE", "/v1/boards/$id") }
+
+    /** Swan's new ideas for a board: (text, id of the card it grows from or null). */
+    suspend fun suggestCards(id: String): List<Pair<String, String?>> {
+        val a = JSONObject(call("POST", "/v1/boards/$id/suggest", JSONObject())).getJSONArray("ideas")
+        return (0 until a.length()).map { a.getJSONObject(it) }.map { it.getString("text") to it.optStringOrNull("from") }
+    }
 
     suspend fun tasks(): List<NoteTask> {
         val t = JSONObject(call("GET", "/v1/tasks")).getJSONArray("tasks")

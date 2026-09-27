@@ -156,7 +156,7 @@ When one of the user's saved things genuinely helps, mention it by its exact nam
 Markdown only: bullets or a checklist, no intro sentence, no closing remarks, no headings. Plain words, no hype, no em dashes. Same language as the idea.` },
       { role: "user", content: `The ${n.kind}:\n${text}\n\nThings the user saved that might relate:\n${shelf}` },
     ],
-    max_tokens: 700, reasoning: { effort: "low" },
+    max_tokens: 1800, reasoning: { effort: "low" },
   } as never)) as { response?: string; choices?: { message: { content: string } }[] };
   // The model sometimes writes [[Name (repo)]]; links only work with the exact saved name.
   const names = new Map(saved.map((x) => [x.name.toLowerCase(), x.name]));
@@ -224,7 +224,7 @@ export async function noteFromVoice(req: Request, env: Env, ctx: ExecutionContex
         { role: "system", content: `Turn this voice memo into a clean ${body.kind === "idea" ? "idea" : "note"} in markdown. First line: a short title (no #). Then the content: short paragraphs or bullets; things to do become "- [ ] ..." lines. Keep every fact, name, number and date. Don't add anything that wasn't said. Same language as the speaker. No em dashes.` },
         { role: "user", content: heard.slice(0, 8000) },
       ],
-      max_tokens: 1200,
+      max_tokens: 3000, reasoning: { effort: "low" },
     } as never)) as { response?: string; choices?: { message: { content: string } }[] };
     const tidy = (out.response ?? out.choices?.[0]?.message?.content ?? "").trim();
     if (tidy) {

@@ -20,7 +20,7 @@ export async function findDeadline(env: Env, text: string, writtenOn: string = t
       { role: "system", content: `This text was written on ${writtenOn} (India). Find a deadline in it: last date to apply, register, submit, buy at a price, or a date the person wants to be reminded. Reply with ONLY the date as YYYY-MM-DD, or NONE. If the year isn't said, use the first such date on or after ${writtenOn} (a past deadline is still a deadline). Ignore dates that are only history (founded, released).` },
       { role: "user", content: text.slice(0, 3000) },
     ],
-    max_tokens: 400,
+    max_tokens: 1500, reasoning: { effort: "low" },
   } as never)) as { response?: string; choices?: { message: { content: string } }[] };
   const answer = (out.response ?? out.choices?.[0]?.message?.content ?? "").trim();
   const m = answer.match(/\d{4}-\d{2}-\d{2}/);

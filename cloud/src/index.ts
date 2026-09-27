@@ -5,6 +5,7 @@ import { downloadApk, latestRelease, publishRelease } from "./updates.ts";
 import { addItemVoice, isOwnAudio, transcribe } from "./voice.ts";
 import { backfillDeadlines, calendar, putDeadline, researchDeadline, upcoming } from "./deadlines.ts";
 import { graph, linkSimilar } from "./graph.ts";
+import { createBoard, deleteBoard, getBoard, listBoards, saveBoard, suggestCards } from "./boards.ts";
 import { createNote, deleteNote, getNote, listNotes, noteFromVoice, brainstorm, openTasks, purgeTrash, setTask, updateNote } from "./notes.ts";
 import { ask, claimResearch, createResearch, finishResearch, getResearch, indexSaves, reindex } from "./ask.ts";
 
@@ -79,6 +80,13 @@ export default {
       if (note && req.method === "PATCH") return await updateNote(note[1], req, env, ctx);
       if (note && req.method === "DELETE") return await deleteNote(note[1], url, env);
       if (path === "/v1/graph" && req.method === "GET") return await graph(env);
+      if (path === "/v1/boards" && req.method === "GET") return await listBoards(env);
+      if (path === "/v1/boards" && req.method === "POST") return await createBoard(req, env);
+      const board = path.match(/^\/v1\/boards\/([0-9a-f]{16})(\/suggest)?$/);
+      if (board && board[2] && req.method === "POST") return await suggestCards(board[1], req, env);
+      if (board && !board[2] && req.method === "GET") return await getBoard(board[1], env);
+      if (board && !board[2] && req.method === "PUT") return await saveBoard(board[1], req, env);
+      if (board && !board[2] && req.method === "DELETE") return await deleteBoard(board[1], env);
       if (path === "/v1/calendar" && req.method === "GET") return await calendar(url, env);
       if (path === "/v1/upcoming" && req.method === "GET") return await upcoming(env);
       const dl = path.match(/^\/v1\/items\/([0-9a-f]{16})\/(deadline|find-deadline)$/);
