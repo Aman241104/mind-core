@@ -38,6 +38,8 @@ export default {
         if (path === "/v1/brain/claim" && req.method === "POST") return await claim(req, env);
         if (path === "/v1/brain/complete" && req.method === "POST") return await complete(req, env);
         if (path === "/v1/brain/fail" && req.method === "POST") return await fail(req, env);
+        const fix = path.match(/^\/v1\/brain\/items\/([0-9a-f]{16})$/);
+        if (fix && req.method === "POST") return await correctItem(fix[1], req, env);
         return bad("not found", 404);
       }
       if (!authorized(req, env, "phone")) return bad("unauthorized", 401);
@@ -347,6 +349,21 @@ async function complete(req: Request, env: Env): Promise<Response> {
     await env.VEC.upsert(vectors);
   }
   return json({ ok: true, items: itemIds.length });
+}
+
+/** Explicit correction from the brain (e.g. a stricter re-check). Unlike complete(), this may lower trust. */
+async function correctItem(id: string, req: Request, env: Env): Promise<Response> {
+  const body = (await req.json()) as { trust?: string; verification?: Json };
+  const allowed = new Set(["verified", "check", "unconfirmed", "dead", "hype"]);
+  if (!body.trust || !allowed.has(body.trust)) return bad("bad trust");
+  const r = await env.DB.prepare(
+    `UPDATE items SET trust = ?, verification = COALESCE(?, verification), updated_at = updated_at WHERE id = ?`,
+  ).bind(body.trust, body.verification ? JSON.stringify(body.verification) : null, id).run();
+  if (!r.meta.changes) return bad("no such item", 404);
+  // Keep the search filter in step with the new trust.
+  const vec = await env.VEC.getByIds([id]);
+  if (vec[0]?.values?.length) await env.VEC.upsert([{ ...vec[0], metadata: { ...vec[0].metadata, trust: body.trust } }]);
+  return json({ ok: true });
 }
 
 async function fail(req: Request, env: Env): Promise<Response> {

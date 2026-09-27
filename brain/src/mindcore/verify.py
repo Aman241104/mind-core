@@ -17,6 +17,28 @@ def _squash(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", s.lower())
 
 
+def name_match(item_name: str, full_repo: str) -> str:
+    """How well an item name matches a repo: "exact" or "partial".
+
+    Items may be named "owner/repo"; notes in brackets ("(formerly Schej)") are ignored.
+    """
+    name = _squash(re.sub(r"\(.*?\)", "", item_name))
+    owner, repo = full_repo.lower().split("/")
+    return "exact" if name in (_squash(repo), _squash(owner + repo)) else "partial"
+
+
+# Reels hype popular projects; an exact name that lands on a tiny repo is usually someone else's project.
+MIN_STARS_FOR_VERIFIED = 50
+
+
+def trust_for(facts: dict, item_name: str) -> str:
+    if facts["archived"]:
+        return "dead"
+    if name_match(item_name, facts["repo"]) == "exact" and (facts.get("stars") or 0) >= MIN_STARS_FOR_VERIFIED:
+        return "verified"
+    return "check"
+
+
 def _gh(*args: str) -> list | dict | None:
     r = subprocess.run(["gh", *args], capture_output=True, text=True, timeout=60)
     if r.returncode != 0:
@@ -78,10 +100,7 @@ def verify_item(item: dict) -> dict:
     item["url"] = f"https://github.com/{facts['repo']}"
     item["canonical_key"] = f"github:{facts['repo'].lower()}"
     item["verification"] = facts
-    # "verified" = the real repo was found (a GitHub link, or an exact name match) and is alive.
-    # A partial name match might be a different project, so it stays "check". Claims are fact-checked in M3.
-    if facts["archived"]:
-        item["trust"] = "dead"
-    else:
-        item["trust"] = "check" if facts.get("match") == "partial name" else "verified"
+    # "verified" = a real, alive, non-tiny repo whose name matches exactly (or the post linked it directly).
+    # Anything looser stays "check" so a wrong project never looks confirmed. Claims are fact-checked in M3.
+    item["trust"] = "verified" if m and not facts["archived"] else trust_for(facts, item["name"])
     return item

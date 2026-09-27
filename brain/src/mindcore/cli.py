@@ -72,6 +72,27 @@ def cmd_pair(args: argparse.Namespace) -> None:
           else f"failed: {(r.stdout + r.stderr).strip()}")
 
 
+def cmd_reverify(args: argparse.Namespace) -> None:
+    """Re-apply today's stricter rule to items verified earlier: only an exact repo-name match stays verified."""
+    from .brain import Api
+    from .verify import name_match, trust_for
+
+    api = Api()
+    changed = 0
+    for it in api.get("/v1/items?limit=500"):
+        v = it.get("verification") or {}
+        if it["trust"] != "verified" or not v.get("repo") or v.get("match"):
+            continue  # nothing to re-check (not verified, not a repo, or already checked by the new rule)
+        v["match"] = name_match(it["name"], v["repo"]) + " name"
+        new = trust_for(v, it["name"])
+        exact = new == "verified"
+        print(f"{'keep ' if exact else 'CHECK'}  {it['name'][:40]:40} -> {v['repo']} ★{v.get('stars')}")
+        if args.apply:
+            api.post(f"/v1/brain/items/{it['id']}", {"trust": new, "verification": v})
+        changed += 0 if exact else 1
+    print(f"{changed} would move to 'check claims'" if not args.apply else f"moved {changed} to 'check claims'")
+
+
 def cmd_status(args: argparse.Namespace) -> None:
     from .brain import Api
 
@@ -96,6 +117,9 @@ def main() -> None:
     p = sub.add_parser("pair", help="pair the phone app with this server over adb")
     p.add_argument("--serial", help="adb device serial (when more than one is connected)")
     p.set_defaults(func=cmd_pair)
+    p = sub.add_parser("reverify", help="re-check earlier 'verified' repos with the exact-name rule")
+    p.add_argument("--apply", action="store_true", help="actually change them (default: dry run)")
+    p.set_defaults(func=cmd_reverify)
     p = sub.add_parser("status", help="show API status: laptop, jobs, saves, items")
     p.set_defaults(func=cmd_status)
     args = parser.parse_args()
