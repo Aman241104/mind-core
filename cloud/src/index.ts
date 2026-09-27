@@ -5,6 +5,7 @@ import { downloadApk, latestRelease, publishRelease } from "./updates.ts";
 import { addItemVoice, isOwnAudio, transcribe } from "./voice.ts";
 import { backfillDeadlines, calendar, putDeadline, researchDeadline, upcoming } from "./deadlines.ts";
 import { graph, linkSimilar } from "./graph.ts";
+import { resurface } from "./resurface.ts";
 import { createBoard, deleteBoard, getBoard, listBoards, saveBoard, suggestCards } from "./boards.ts";
 import { createNote, deleteNote, getNote, listNotes, noteFromVoice, brainstorm, openTasks, purgeTrash, setTask, updateNote } from "./notes.ts";
 import { ask, claimResearch, createResearch, finishResearch, getResearch, indexSaves, reindex } from "./ask.ts";
@@ -71,7 +72,7 @@ export default {
       if (path === "/v1/notes" && req.method === "POST") return await createNote(req, env, ctx);
       if (path === "/v1/tasks" && req.method === "GET") return await openTasks(env);
       const task = path.match(/^\/v1\/notes\/([0-9a-f]{16})\/task$/);
-      if (task && req.method === "POST") return await setTask(task[1], req, env);
+      if (task && req.method === "POST") return await setTask(task[1], req, env, ctx);
       const bs = path.match(/^\/v1\/notes\/([0-9a-f]{16})\/brainstorm$/);
       if (bs && req.method === "POST") return await brainstorm(bs[1], req, env);
       if (path === "/v1/notes/voice" && req.method === "POST") return await noteFromVoice(req, env, ctx);
@@ -80,6 +81,7 @@ export default {
       if (note && req.method === "PATCH") return await updateNote(note[1], req, env, ctx);
       if (note && req.method === "DELETE") return await deleteNote(note[1], url, env);
       if (path === "/v1/graph" && req.method === "GET") return await graph(env);
+      if (path === "/v1/resurface" && req.method === "GET") return await resurface(env);
       if (path === "/v1/boards" && req.method === "GET") return await listBoards(env);
       if (path === "/v1/boards" && req.method === "POST") return await createBoard(req, env);
       const board = path.match(/^\/v1\/boards\/([0-9a-f]{16})(\/suggest)?$/);

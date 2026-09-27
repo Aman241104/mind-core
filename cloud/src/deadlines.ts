@@ -71,8 +71,12 @@ export async function calendar(url: URL, env: Env): Promise<Response> {
     ).bind(month).all<{ day: string; id: string; name: string; kind: string; trust: string }>(),
     env.DB.prepare(
       `SELECT deadline AS day, id, name, kind, trust, deadline_source AS source FROM items
-       WHERE deadline IS NOT NULL AND substr(deadline, 1, 7) = ? ORDER BY deadline`,
-    ).bind(month).all(),
+       WHERE deadline IS NOT NULL AND substr(deadline, 1, 7) = ?
+       UNION ALL
+       SELECT d.due, d.note_id, d.text, 'task', '', 'note' FROM note_dues d JOIN notes n ON n.id = d.note_id
+       WHERE n.deleted_at IS NULL AND d.due IS NOT NULL AND substr(d.due, 1, 7) = ?
+       ORDER BY 1`,
+    ).bind(month, month).all(),
   ]);
   const days: Record<string, { id: string; name: string; kind: string; trust: string }[]> = {};
   for (const r of saved.results) (days[r.day] ??= []).push({ id: r.id, name: r.name, kind: r.kind, trust: r.trust });
@@ -83,8 +87,11 @@ export async function calendar(url: URL, env: Env): Promise<Response> {
 export async function upcoming(env: Env): Promise<Response> {
   const rows = await env.DB.prepare(
     `SELECT id, name, kind, trust, status, deadline, deadline_source AS source FROM items
-     WHERE deadline IS NOT NULL AND deadline >= date(?, '-3 days') AND status NOT IN ('done', 'skip')
-     ORDER BY deadline LIMIT 20`,
+     WHERE deadline IS NOT NULL AND deadline >= date(?1, '-3 days') AND status NOT IN ('done', 'skip')
+     UNION ALL
+     SELECT d.note_id, d.text, 'task', '', 'open', d.due, 'note' FROM note_dues d JOIN notes n ON n.id = d.note_id
+     WHERE n.deleted_at IS NULL AND d.due IS NOT NULL AND d.due >= date(?1, '-3 days')
+     ORDER BY 6 LIMIT 20`,
   ).bind(todayIST()).all();
   return json({ today: todayIST(), items: rows.results });
 }

@@ -1,6 +1,7 @@
 // P2: notes and ideas. Saved as markdown; indexed for search and Ask; linked by [[mentions]] and by meaning.
 import type { Env } from "./index.ts";
 import { isOwnAudio, transcribe } from "./voice.ts";
+import { findDeadline, todayIST } from "./deadlines.ts";
 
 const EMBED_MODEL = "@cf/baai/bge-m3";
 const WRITER = "@cf/openai/gpt-oss-120b";
@@ -188,7 +189,7 @@ export async function openTasks(env: Env): Promise<Response> {
 }
 
 /** Tick or untick one "- [ ]" line. [text] guards against the note having changed since the list was loaded. */
-export async function setTask(id: string, req: Request, env: Env): Promise<Response> {
+export async function setTask(id: string, req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const b = (await req.json()) as { line?: number; done?: boolean; text?: string };
   const n = await env.DB.prepare("SELECT body FROM notes WHERE id = ? AND deleted_at IS NULL").bind(id).first<{ body: string }>();
   if (!n) return json({ error: "no such note" }, 404);
@@ -197,6 +198,7 @@ export async function setTask(id: string, req: Request, env: Env): Promise<Respo
   if (!m || (b.text && m[4].trim() !== b.text.trim())) return json({ error: "that note changed; pull to refresh" }, 409);
   lines[b.line!] = m[1] + (b.done ? "x" : " ") + m[3] + m[4];
   await env.DB.prepare("UPDATE notes SET body = ?, updated_at = datetime('now') WHERE id = ?").bind(lines.join("\n"), id).run();
+  ctx.waitUntil(refreshDues(env, id));
   return json({ ok: true });
 }
 
@@ -251,10 +253,30 @@ function noteChunks(n: NoteRow): string[] {
   return out.filter((c) => c.length > 8);
 }
 
+/**
+ * Dates in open to-dos go to the calendar. Each line's text is looked at once (cached in note_dues, NULL = no date);
+ * ticked or deleted lines drop out.
+ */
+export async function refreshDues(env: Env, id: string): Promise<void> {
+  const n = await env.DB.prepare("SELECT body, created_at FROM notes WHERE id = ? AND deleted_at IS NULL").bind(id).first<{ body: string; created_at: string }>();
+  const open = n ? [...new Set(n.body.split("\n").map((l) => l.match(TASK)).filter((m) => m && m[2] === " " && m[4].trim()).map((m) => m![4].trim()))] : [];
+  const known = new Map((await env.DB.prepare("SELECT text, due FROM note_dues WHERE note_id = ?").bind(id).all<{ text: string; due: string | null }>())
+    .results.map((r) => [r.text, r.due]));
+  const rows: [string, string | null][] = [];
+  for (const text of open.slice(0, 40)) {
+    rows.push([text, known.has(text) ? known.get(text)! : await findDeadline(env, text, todayIST())]);
+  }
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM note_dues WHERE note_id = ?").bind(id),
+    ...rows.map(([text, due]) => env.DB.prepare("INSERT OR IGNORE INTO note_dues (note_id, text, due) VALUES (?, ?, ?)").bind(id, text, due)),
+  ]);
+}
+
 /** Re-embed a note, refresh its search entry, its [[mentions]] and its related links. */
 export async function reindexNote(env: Env, id: string): Promise<void> {
   const n = await env.DB.prepare("SELECT * FROM notes WHERE id = ?").bind(id).first<NoteRow>();
   if (!n) return;
+  await refreshDues(env, id);
   const chunks = noteChunks(n);
   await env.DB.batch([
     env.DB.prepare("DELETE FROM notes_fts WHERE note_id = ?").bind(id),

@@ -107,12 +107,14 @@ fun MindCoreApp() {
         // Note editor: a note id, or "new:note" / "new:idea".
         var editNote by rememberSaveable { mutableStateOf<String?>(null) }
         var openBoard by rememberSaveable { mutableStateOf<String?>(null) }
+        // "note:<id>" opens a note (dated to-dos in Coming up, the calendar and widgets); anything else is an item.
+        fun openAny(id: String) { if (id.startsWith("note:")) editNote = id.removePrefix("note:") else openItem = id }
         val notes = remember(library) { NotesState() }
         LaunchedEffect(tab, editNote, openBoard, library) { if ((tab == 0 || tab == 2) && editNote == null && openBoard == null) notes.refresh(library.api) }
         val askState = remember { AskState() }
         // A widget tap can ask to open an item.
         val requested by app.mindcore.Nav.openItem.collectAsState()
-        LaunchedEffect(requested) { requested?.let { openItem = it; app.mindcore.Nav.openItem.value = null } }
+        LaunchedEffect(requested) { requested?.let { openAny(it); app.mindcore.Nav.openItem.value = null } }
         val backdrop = rememberLayerBackdrop()
         val haptics = LocalHapticFeedback.current
         BackHandler(enabled = showSettings || showGlass || showBlob || showCalendar || showGraph || openItem != null || editNote != null || openBoard != null) {
@@ -169,12 +171,12 @@ fun MindCoreApp() {
                             onOpenNote = { id -> editNote = id },
                         )
                         showGraph && api != null -> GraphScreen(api, onBack = { showGraph = false; graphFocus = null }, onOpen = { id -> openItem = id }, focus = graphFocus, onOpenNote = { id -> editNote = id })
-                        showCalendar && api != null -> CalendarScreen(api, onBack = { showCalendar = false }, onOpen = { id -> openItem = id })
+                        showCalendar && api != null -> CalendarScreen(api, onBack = { showCalendar = false }, onOpen = { id -> openAny(id) })
                         tab == 0 -> ForYouScreen(
                             library,
                             updates,
                             onSettings = { showSettings = true },
-                            onOpen = { id -> openItem = id },
+                            onOpen = { id -> openAny(id) },
                             onOpenKind = { k -> libraryQuery.clear(); libraryQuery.kinds = setOfNotNull(k); tab = 1 },
                             onCalendar = { showCalendar = true },
                             onGraph = { showGraph = true },

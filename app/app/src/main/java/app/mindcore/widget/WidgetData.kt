@@ -65,7 +65,7 @@ object WidgetData {
         fun detail(it: ApiItem) = it.verification?.stars?.let { s -> "stars:" + compactNumber(s) } ?: it.oneLine.orEmpty()
         val weekAgo = LocalDate.now().minusDays(7).toString()
         val o = JSONObject()
-            .put("fresh", JSONArray(newest.take(8).map { JSONObject().put("id", it.id).put("name", it.name).put("kind", it.kind).put("detail", detail(it)) }))
+            .put("fresh", JSONArray(newest.take(8).map { JSONObject().put("id", if (it.kind == "task") "note:${it.id}" else it.id).put("name", it.name).put("kind", it.kind).put("detail", detail(it)) }))
             .put("upcoming", JSONArray(upcoming.take(6).map { JSONObject().put("id", it.id).put("name", it.name).put("kind", it.kind).put("date", it.deadline) }))
             .put("laptopOnline", status?.laptopOnline ?: false)
             .put("processing", (status?.jobs?.get("pending") ?: 0) + (status?.jobs?.get("leased") ?: 0))

@@ -164,10 +164,10 @@ private fun Label(text: String) = Text(text, style = MaterialTheme.typography.la
 private fun DayRow(item: DayItem, onOpen: (String) -> Unit, due: String?) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .clickable { onOpen(item.id) }.padding(horizontal = 14.dp, vertical = 12.dp),
+            .clickable { onOpen(if (item.kind == "task") "note:${item.id}" else item.id) }.padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Pill(kindLabels[item.kind] ?: item.kind, kindColor(item.kind))
+        Pill(kindLabels[item.kind] ?: if (item.kind == "task") "To-do" else item.kind, kindColor(item.kind))
         Spacer(Modifier.width(10.dp))
         Text(item.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, modifier = Modifier.weight(1f))
         due?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error) }

@@ -43,6 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -94,6 +95,10 @@ fun ForYouScreen(
     val toCheck = remember(items) { newestFirst.filter { it.trust == "check" || it.trust == "unconfirmed" }.take(4) }
     val continuing = remember(items) { items.filter { it.status == "want" || it.status == "trying" }.take(8) }
     val kinds = remember(items) { items.groupingBy { it.kind }.eachCount().entries.sortedByDescending { it.value } }
+    var revisit by remember { mutableStateOf<List<app.mindcore.data.Resurfaced>>(emptyList()) }
+    LaunchedEffect(library.api, library.loading) {
+        if (!library.loading) library.api?.let { api -> runCatching { api.resurface() }.onSuccess { revisit = it } }
+    }
 
     PullToRefreshBox(isRefreshing = library.loading, onRefresh = { scope.launch { library.refresh() } }) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 140.dp)) {
@@ -127,12 +132,23 @@ fun ForYouScreen(
                 }
             }
 
+            if (revisit.isNotEmpty()) {
+                item { SectionHeader("Revisit") }
+                item {
+                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items(revisit, key = { "re-" + it.id }) { r ->
+                            RevisitCard(r) { onOpen(if (r.type == "note") "note:${r.id}" else r.id) }
+                        }
+                    }
+                }
+            }
+
             if (library.upcoming.isNotEmpty()) {
                 item { SectionHeader("Coming up", "Calendar", onCalendar) }
                 items(library.upcoming.take(5), key = { "due-" + it.id }) { u ->
                     val label = dueLabel(LocalDate.parse(u.deadline), LocalDate.now())
                     Row(
-                        Modifier.fillMaxWidth().clickable { onOpen(u.id) }.padding(horizontal = 20.dp, vertical = 10.dp),
+                        Modifier.fillMaxWidth().clickable { onOpen(if (u.kind == "task") "note:${u.id}" else u.id) }.padding(horizontal = 20.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.width(56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -143,7 +159,7 @@ fun ForYouScreen(
                         }
                         Column(Modifier.weight(1f).padding(start = 8.dp)) {
                             Text(u.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${kindLabels[u.kind] ?: u.kind} · $label", style = MaterialTheme.typography.bodySmall,
+                            Text("${kindLabels[u.kind] ?: if (u.kind == "task") "To-do" else u.kind} · $label", style = MaterialTheme.typography.bodySmall,
                                 color = if (label.endsWith("ago")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
@@ -459,5 +475,23 @@ private fun TaskRow(t: app.mindcore.data.NoteTask, onDone: () -> Unit, onOpen: (
                     color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
+    }
+}
+
+/** A second look: why it's back (small), what it is (big). Ideas keep their pastel. */
+@Composable
+private fun RevisitCard(r: app.mindcore.data.Resurfaced, onClick: () -> Unit) {
+    val note = r.type == "note"
+    val p = pastelFor(r.color)
+    val bg = if (note) p.bg() else MaterialTheme.colorScheme.surfaceContainerHigh
+    val ink = if (note) p.ink() else MaterialTheme.colorScheme.onSurface
+    Column(
+        Modifier.width(240.dp).pressScale(onClick).clip(RoundedCornerShape(24.dp)).background(bg).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(r.reason, style = MaterialTheme.typography.labelMedium, color = if (note) ink.copy(alpha = 0.75f) else MaterialTheme.colorScheme.primary,
+            maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(r.title, style = MaterialTheme.typography.titleLarge, color = ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        r.subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ink.copy(alpha = 0.75f), maxLines = 2, overflow = TextOverflow.Ellipsis) }
     }
 }

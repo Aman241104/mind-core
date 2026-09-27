@@ -32,6 +32,8 @@ data class BoardCard(
 )
 data class Board(val id: String, val title: String, val cards: List<BoardCard>, val edges: List<Pair<String, String>>)
 
+data class Resurfaced(val type: String, val id: String, val title: String, val kind: String, val subtitle: String?, val reason: String, val color: Int)
+
 /** One open "- [ ]" line in a note, for Today. */
 data class NoteTask(val noteId: String, val noteTitle: String, val kind: String, val color: Int, val line: Int, val text: String)
 data class NoteDetail(val summary: NoteSummary, val body: String, val links: List<NoteLink>, val backlinks: List<NoteLink>)
@@ -265,6 +267,15 @@ class Api(private val baseUrl: String, private val token: String) {
     suspend fun suggestCards(id: String): List<Pair<String, String?>> {
         val a = JSONObject(call("POST", "/v1/boards/$id/suggest", JSONObject())).getJSONArray("ideas")
         return (0 until a.length()).map { a.getJSONObject(it) }.map { it.getString("text") to it.optStringOrNull("from") }
+    }
+
+    /** A few things worth a second look today (an idea at rest, something you meant to try, an older find). */
+    suspend fun resurface(): List<Resurfaced> {
+        val a = JSONObject(call("GET", "/v1/resurface")).getJSONArray("items")
+        return (0 until a.length()).map { a.getJSONObject(it) }.map {
+            Resurfaced(it.getString("type"), it.getString("id"), it.getString("title"), it.optString("kind"),
+                it.optStringOrNull("subtitle"), it.getString("reason"), it.optInt("color"))
+        }
     }
 
     suspend fun tasks(): List<NoteTask> {
