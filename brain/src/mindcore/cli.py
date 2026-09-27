@@ -55,6 +55,23 @@ def cmd_brain(args: argparse.Namespace) -> None:
     run(once=args.once, batch=args.batch, max_batches=args.batches)
 
 
+def cmd_pair(args: argparse.Namespace) -> None:
+    """Send the server address + phone key to the app over adb, so nothing is typed on the phone."""
+    import os
+    import subprocess
+    from urllib.parse import urlencode
+
+    from .brain import SECRETS
+
+    env = dict(line.split("=", 1) for line in SECRETS.read_text().splitlines() if "=" in line)
+    link = "mindcore://pair?" + urlencode({"url": env["MINDCORE_API"], "token": env["API_TOKEN"]})
+    cmd = ["adb"] + (["-s", args.serial] if args.serial else []) + [
+        "shell", f"am start -a android.intent.action.VIEW -d '{link}' app.mindcore"]
+    r = subprocess.run(cmd, capture_output=True, text=True, env=os.environ)
+    print("sent pairing link to the phone" if r.returncode == 0 and "Error" not in r.stdout + r.stderr
+          else f"failed: {(r.stdout + r.stderr).strip()}")
+
+
 def cmd_status(args: argparse.Namespace) -> None:
     from .brain import Api
 
@@ -76,6 +93,9 @@ def main() -> None:
     p.add_argument("--batch", type=int, default=6, help="saves per extraction call")
     p.add_argument("--batches", type=int, default=None, help="stop after this many batches")
     p.set_defaults(func=cmd_brain)
+    p = sub.add_parser("pair", help="pair the phone app with this server over adb")
+    p.add_argument("--serial", help="adb device serial (when more than one is connected)")
+    p.set_defaults(func=cmd_pair)
     p = sub.add_parser("status", help="show API status: laptop, jobs, saves, items")
     p.set_defaults(func=cmd_status)
     args = parser.parse_args()

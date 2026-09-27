@@ -33,8 +33,11 @@ data class AppSettings(
     val obsidian: Boolean = false,
     val notebookLm: Boolean = false,
     val perplexity: Boolean = false,
-    val serverUrl: String = "",
+    val serverUrl: String = DEFAULT_SERVER,
+    val apiToken: String = "",
 )
+
+const val DEFAULT_SERVER = "https://mindcore.mind-core.workers.dev"
 
 private val Context.store by preferencesDataStore("settings")
 
@@ -51,6 +54,7 @@ private object Keys {
     val notebookLm = booleanPreferencesKey("notebooklm")
     val perplexity = booleanPreferencesKey("perplexity")
     val serverUrl = stringPreferencesKey("server_url")
+    val apiToken = stringPreferencesKey("api_token")
 }
 
 private inline fun <reified E : Enum<E>> Preferences.enum(key: Preferences.Key<String>, default: E): E =
@@ -70,7 +74,8 @@ private fun Preferences.toSettings(): AppSettings {
         obsidian = this[Keys.obsidian] ?: d.obsidian,
         notebookLm = this[Keys.notebookLm] ?: d.notebookLm,
         perplexity = this[Keys.perplexity] ?: d.perplexity,
-        serverUrl = this[Keys.serverUrl] ?: d.serverUrl,
+        serverUrl = this[Keys.serverUrl]?.takeIf { it.isNotBlank() } ?: d.serverUrl,
+        apiToken = this[Keys.apiToken] ?: d.apiToken,
     )
 }
 
@@ -92,6 +97,7 @@ class SettingsStore(private val context: Context) {
             p[Keys.notebookLm] = new.notebookLm
             p[Keys.perplexity] = new.perplexity
             p[Keys.serverUrl] = new.serverUrl
+            p[Keys.apiToken] = new.apiToken
         }
     }
 }

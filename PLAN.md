@@ -336,7 +336,7 @@ Bottom bar (Convx-style): glass pill with **For You · Library · Ask**, plus a 
 | Build | Gradle on this Arch laptop → `adb install` straight to your 7a (`adb` is already installed; Android SDK still needed) |
 | API | **Cloudflare Workers** (free: 100k requests/day) |
 | Database | **D1** (SQLite, free 5 GB): items, sources, relations, jobs, full-text search |
-| Files (screenshots, audio) | **R2** (free 10 GB, no download fees) |
+| Files (screenshots) | ~~R2~~ (needs a card) → **Cloudinary Free** (your existing account: 25 credits/month ≈ 25 GB storage+bandwidth, 10 MB max per image). The phone uploads straight to Cloudinary using a signature from the Worker (the API secret never leaves Cloudflare), into `mind-core/`. The laptop reads the image by URL for OCR. Cloudinary thumbnails (`w_400,f_auto,q_auto`) keep the app fast. |
 | Meaning search | **Vectorize** (free tier) |
 | Jobs | **Queues** (free: 10k operations/day, 24h retention) |
 | Cloud AI | **Workers AI**: embeddings, reranker, Whisper (free daily allowance) |
