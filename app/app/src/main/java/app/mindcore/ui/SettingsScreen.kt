@@ -43,6 +43,17 @@ import app.mindcore.settings.AppSettings
 import app.mindcore.settings.PhoneAi
 import app.mindcore.settings.Research
 import app.mindcore.settings.ThemeMode
+import android.content.Context
+import android.content.Intent
+import android.provider.Settings
+import android.view.accessibility.AccessibilityManager
+import androidx.compose.material3.Slider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.mindcore.BuildConfig
 import app.mindcore.update.UpdateBanner
 import app.mindcore.update.UpdateState
@@ -135,6 +146,45 @@ fun SettingsScreen(
                 Divider()
                 Toggle("Offer copied links", "When you open the app with a link copied (M2)", settings.clipboardCheck) { v ->
                     onChange { it.copy(clipboardCheck = v) }
+                }
+            }
+        }
+
+        item { Section("Edge drawer") }
+        item {
+            val context = LocalContext.current
+            // Re-check whenever this screen is shown (you come back from Android's Accessibility page).
+            var on by remember { mutableStateOf(edgeServiceOn(context)) }
+            LifecycleResumeEffect(Unit) { on = edgeServiceOn(context); onPauseOrDispose { } }
+            Group {
+                Row(
+                    Modifier.fillMaxWidth().clickable {
+                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }.padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(if (on) "Edge drawer is on" else "Turn on edge drawer", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (on) "Swipe in from the screen edge in any app. Turn off in Accessibility settings."
+                            else "Accessibility → Downloaded apps → mind-core edge drawer. It can't read your screen or clipboard.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null)
+                }
+                Divider()
+                Toggle("Save pop-up when you copy", "A \"Save to mind-core?\" pill for a few seconds after copying", settings.copyPopup) { v ->
+                    onChange { it.copy(copyPopup = v) }
+                }
+                Divider()
+                Choice("Handle side", listOf(false, true), settings.edgeRight, { if (it) "Right" else "Left" }) { v ->
+                    onChange { it.copy(edgeRight = v) }
+                }
+                Divider()
+                Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+                    Text("Handle height", style = MaterialTheme.typography.titleMedium)
+                    Slider(value = settings.edgePosition, onValueChange = { v -> onChange { it.copy(edgePosition = v) } }, valueRange = 0.1f..0.8f)
                 }
             }
         }
@@ -278,4 +328,10 @@ private fun Info(title: String, value: String) {
         Text(title, style = MaterialTheme.typography.titleMedium)
         Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+private fun edgeServiceOn(context: Context): Boolean {
+    val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+    return am.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+        .any { it.resolveInfo.serviceInfo.packageName == context.packageName }
 }

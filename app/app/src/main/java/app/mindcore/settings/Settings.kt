@@ -35,6 +35,9 @@ data class AppSettings(
     val obsidian: Boolean = false,
     val notebookLm: Boolean = false,
     val perplexity: Boolean = false,
+    val edgeRight: Boolean = true, // edge handle on the right side (false = left)
+    val edgePosition: Float = 0.35f, // handle height on screen, 0 = top, 1 = bottom
+    val copyPopup: Boolean = true, // "Save to mind-core?" pill after you copy something
     val serverUrl: String = DEFAULT_SERVER,
     val apiToken: String = "",
 )
@@ -71,6 +74,9 @@ private object Keys {
     val obsidian = booleanPreferencesKey("obsidian")
     val notebookLm = booleanPreferencesKey("notebooklm")
     val perplexity = booleanPreferencesKey("perplexity")
+    val edgeRight = booleanPreferencesKey("edge_right")
+    val edgePosition = floatPreferencesKey("edge_position")
+    val copyPopup = booleanPreferencesKey("copy_popup")
     val serverUrl = stringPreferencesKey("server_url")
     val apiToken = stringPreferencesKey("api_token")
 }
@@ -92,6 +98,9 @@ private fun Preferences.toSettings(): AppSettings {
         obsidian = this[Keys.obsidian] ?: d.obsidian,
         notebookLm = this[Keys.notebookLm] ?: d.notebookLm,
         perplexity = this[Keys.perplexity] ?: d.perplexity,
+        edgeRight = this[Keys.edgeRight] ?: d.edgeRight,
+        edgePosition = this[Keys.edgePosition] ?: d.edgePosition,
+        copyPopup = this[Keys.copyPopup] ?: d.copyPopup,
         serverUrl = this[Keys.serverUrl]?.takeIf { it.isNotBlank() } ?: d.serverUrl,
         apiToken = this[Keys.apiToken] ?: d.apiToken,
     )
@@ -156,6 +165,9 @@ class SettingsStore(private val context: Context) {
             p[Keys.obsidian] = new.obsidian
             p[Keys.notebookLm] = new.notebookLm
             p[Keys.perplexity] = new.perplexity
+            p[Keys.edgeRight] = new.edgeRight
+            p[Keys.edgePosition] = new.edgePosition
+            p[Keys.copyPopup] = new.copyPopup
             p[Keys.serverUrl] = new.serverUrl
             p[Keys.apiToken] = new.apiToken
         }

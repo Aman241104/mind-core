@@ -3,6 +3,8 @@
     <string name="tile_label">Save to mind-core</string>
     <string name="widget_description">Save a link, note or screenshot in one tap</string>
     <string name="shortcut_capture">Save something</string>
+    <string name="edge_service_summary">Edge handle and a "Save to mind-core?" pill after you copy something.</string>
+    <string name="edge_service_description">What this can see: when a window changes, and the short text of pop-up messages such as "Link copied", so it can offer to save. It cannot read what is on your screen (it is not allowed to retrieve window content) and it cannot read your clipboard. mind-core only reads what you copied after you tap the pill, and sends nothing until you press Save. Turn it off here any time.</string>
     <string name="widget_upcoming_description">Your next deadlines and days left</string>
     <string name="widget_fresh_description">Newest finds and whether your laptop is working on saves</string>
     <string name="widget_pick_description">One saved thing to try today, with Done and Skip</string>
