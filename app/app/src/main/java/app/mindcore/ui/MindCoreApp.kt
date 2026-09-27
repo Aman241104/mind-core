@@ -174,7 +174,7 @@ fun MindCoreApp() {
                         )
                         tab == 1 -> LibraryScreen(library, libraryQuery, onOpen = { id -> openItem = id })
                         tab == 2 -> NotesScreen(api, notes, onOpen = { id -> editNote = id }, onNew = { k -> editNote = "new:$k" })
-                        else -> AskScreen(askState, library.api, settings.research, onOpenItem = { id -> openItem = id })
+                        else -> AskScreen(askState, library.api, settings.research, onOpenItem = { id -> openItem = id }, onOpenNote = { id -> editNote = id })
                     }
                 }
                 if (!showSettings && !showGlass && !showBlob && !showCalendar && !showGraph && openItem == null && editNote == null) {

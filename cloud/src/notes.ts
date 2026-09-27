@@ -122,6 +122,54 @@ export async function purgeTrash(env: Env): Promise<void> {
   }
 }
 
+const MODES: Record<string, string> = {
+  expand: "Grow the idea: 5 to 8 fresh angles, variations or features, each one line, most promising first.",
+  questions: "Ask the 5 to 7 sharpest questions this idea has to answer (users, risks, cost, what would make it fail). One line each.",
+  next: "Turn it into the smallest real next steps: a checklist of 4 to 7 concrete tasks, each doable in under a day, as \"- [ ] ...\" lines.",
+  connect: "Show how the things the user saved could combine with this idea: 3 to 6 bullets, each naming the saved thing and what it adds.",
+};
+
+/**
+ * Brainstorm with Swan: expand an idea, question it, plan next steps, or connect it to what you've saved.
+ * Uses the note plus your closest saved items (so suggestions can [[link]] to real things). Returns markdown.
+ */
+export async function brainstorm(id: string, req: Request, env: Env): Promise<Response> {
+  const b = (await req.json()) as { mode?: string };
+  const mode = b.mode && MODES[b.mode] ? b.mode : "expand";
+  const n = await env.DB.prepare("SELECT * FROM notes WHERE id = ? AND deleted_at IS NULL").bind(id).first<NoteRow>();
+  if (!n) return json({ error: "no such note" }, 404);
+  const text = `${n.title}\n\n${n.body}`.trim().slice(0, 6000);
+  if (text.length < 3) return json({ error: "write a few words first" }, 400);
+  const emb = (await env.AI.run(EMBED_MODEL, { text: [text.slice(0, 2000)] })) as { data: number[][] };
+  const hits = await env.VEC.query(emb.data[0], { topK: 8, filter: { shelf: "learning" } });
+  const ids = hits.matches.filter((m) => m.score >= 0.45).map((m) => m.id);
+  const saved = ids.length
+    ? (await env.DB.prepare(`SELECT name, kind, one_line FROM items WHERE id IN (${ids.map(() => "?").join(",")})`).bind(...ids)
+      .all<{ name: string; kind: string; one_line: string | null }>()).results
+    : [];
+  const shelf = saved.map((s) => `- ${s.name} (${s.kind}): ${s.one_line ?? ""}`).join("\n") || "(nothing closely related)";
+  const out = (await env.AI.run(WRITER, {
+    messages: [
+      { role: "system", content: `You are Swan, a sharp and kind brainstorming partner inside the user's notes app.
+${MODES[mode]}
+When one of the user's saved things genuinely helps, mention it by its exact name in double brackets, like [[Name]]; never invent saved things.
+Markdown only: bullets or a checklist, no intro sentence, no closing remarks, no headings. Plain words, no hype, no em dashes. Same language as the idea.` },
+      { role: "user", content: `The ${n.kind}:\n${text}\n\nThings the user saved that might relate:\n${shelf}` },
+    ],
+    max_tokens: 700, reasoning: { effort: "low" },
+  } as never)) as { response?: string; choices?: { message: { content: string } }[] };
+  // The model sometimes writes [[Name (repo)]]; links only work with the exact saved name.
+  const names = new Map(saved.map((x) => [x.name.toLowerCase(), x.name]));
+  const md = (out.response ?? out.choices?.[0]?.message?.content ?? "").trim().replace(/\u2014/g, ",")
+    .replace(/\[\[([^\]]+?)\]\]/g, (whole, inner: string) => {
+      const bare = inner.replace(/\s*\([^)]*\)\s*$/, "").trim();
+      const hit = names.get(inner.toLowerCase()) ?? names.get(bare.toLowerCase());
+      return hit ? `[[${hit}]]` : bare; // an unknown name loses its brackets rather than become a dead link
+    });
+  if (!md) return json({ error: "Swan came up empty, try again" }, 502);
+  return json({ mode, text: md });
+}
+
 const TASK = /^(\s*[-*] \[)( |x|X)(\]\s?)(.*)$/;
 
 /** Open to-dos across all notes (for the Today screen), oldest note first so nothing gets buried. */

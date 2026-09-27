@@ -73,7 +73,7 @@ data class Status(
 
 class ApiError(message: String) : Exception(message)
 
-data class AskSource(val n: Int, val type: String, val itemId: String?, val url: String?, val title: String, val kind: String?)
+data class AskSource(val n: Int, val type: String, val itemId: String?, val url: String?, val title: String, val kind: String?, val noteId: String? = null)
 
 data class AskAnswer(val answer: String, val sources: List<AskSource>, val found: Boolean)
 
@@ -96,6 +96,60 @@ class Api(private val baseUrl: String, private val token: String) {
             found = o.optBoolean("found", true),
         )
     }
+
+    /**
+     * Ask, with the answer streamed in as it's written: [onDelta] gets each new piece (on the IO thread).
+     * Returns the finished answer with only the sources it actually cited.
+     */
+    suspend fun askStream(question: String, history: List<Pair<String, String>>, onDelta: suspend (String) -> Unit): AskAnswer =
+        withContext(Dispatchers.IO) {
+            val h = JSONArray()
+            history.forEach { (role, content) -> h.put(JSONObject().put("role", role).put("content", content)) }
+            val conn = URL(baseUrl.trimEnd('/') + "/v1/ask").openConnection() as HttpURLConnection
+            try {
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 15_000
+                conn.readTimeout = 60_000 // between pieces, not total
+                conn.setRequestProperty("authorization", "Bearer $token")
+                conn.setRequestProperty("content-type", "application/json")
+                conn.doOutput = true
+                conn.outputStream.use { it.write(JSONObject().put("q", question).put("history", h).put("stream", true).toString().toByteArray()) }
+                val code = conn.responseCode
+                if (code == 401) throw ApiError("The server didn't accept this phone's key. Pair again from the laptop.")
+                if (code >= 400) {
+                    val text = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+                    throw ApiError(runCatching { JSONObject(text).getString("error") }.getOrNull() ?: "Server error $code")
+                }
+                var all = emptyList<AskSource>()
+                val answer = StringBuilder()
+                var cited = emptyList<Int>()
+                var found = true
+                conn.inputStream.bufferedReader().useLines { lines ->
+                    for (line in lines) {
+                        if (line.isBlank()) continue
+                        val o = JSONObject(line)
+                        when (o.optString("type")) {
+                            "sources" -> all = o.getJSONArray("sources").let { src ->
+                                (0 until src.length()).map { i ->
+                                    val s = src.getJSONObject(i)
+                                    AskSource(s.getInt("n"), s.getString("type"), s.optStringOrNull("item_id"), s.optStringOrNull("url"),
+                                        s.getString("title"), s.optStringOrNull("kind"), s.optStringOrNull("note_id"))
+                                }
+                            }
+                            "delta" -> { val t = o.optString("text"); answer.append(t); onDelta(t) }
+                            "done" -> {
+                                cited = o.getJSONArray("cited").let { c -> (0 until c.length()).map { c.getInt(it) } }
+                                found = o.optBoolean("found", true)
+                            }
+                            "error" -> throw ApiError(o.optString("error", "The answer stopped halfway"))
+                        }
+                    }
+                }
+                AskAnswer(answer.toString().trim(), all.filter { it.n in cited }.sortedBy { cited.indexOf(it.n) }, found)
+            } finally {
+                conn.disconnect()
+            }
+        }
 
     /** Returns the research id and whether the laptop is online to answer it. */
     suspend fun startResearch(question: String): Pair<Int, Boolean> {
@@ -160,6 +214,10 @@ class Api(private val baseUrl: String, private val token: String) {
     suspend fun deleteNote(id: String, restore: Boolean = false) {
         call("DELETE", "/v1/notes/$id" + if (restore) "?restore=1" else "")
     }
+
+    /** Swan's suggestions for a note, as markdown. mode: expand | questions | next | connect */
+    suspend fun brainstorm(noteId: String, mode: String): String =
+        JSONObject(call("POST", "/v1/notes/$noteId/brainstorm", JSONObject().put("mode", mode))).getString("text")
 
     suspend fun tasks(): List<NoteTask> {
         val t = JSONObject(call("GET", "/v1/tasks")).getJSONArray("tasks")

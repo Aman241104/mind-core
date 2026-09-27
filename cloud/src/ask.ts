@@ -83,7 +83,7 @@ const KINDS: [RegExp, string][] = [
 ];
 
 export async function ask(req: Request, env: Env, hybridItems: (q: string, limit: number) => Promise<Record<string, unknown>[]>): Promise<Response> {
-  const body = (await req.json()) as { q?: string; history?: Turn[] };
+  const body = (await req.json()) as { q?: string; history?: Turn[]; stream?: boolean };
   const q = body.q?.trim();
   if (!q) return json({ error: "empty question" }, 400);
 
@@ -124,6 +124,17 @@ export async function ask(req: Request, env: Env, hybridItems: (q: string, limit
     env.VEC_CHUNKS.query(emb.data[0], { topK: 12, filter: { shelf: { $ne: "work" } }, returnMetadata: "all" }),
   ]);
   items.forEach((it) => { if (!candidates.some((c) => c.key === `i:${it.id}`)) candidates.push(itemSource(it)); });
+  // GraphRAG-lite: things connected to the best matches (saved together, or similar in meaning) come along too;
+  // the reranker drops the ones that don't help.
+  const seeds = items.slice(0, 5).map((it) => String(it.id));
+  if (seeds.length && !listMode) {
+    const ph = seeds.map(() => "?").join(",");
+    const near = await env.DB.prepare(
+      `SELECT i.* FROM relations r JOIN items i ON i.id = CASE WHEN r.a IN (${ph}) THEN r.b ELSE r.a END
+       WHERE (r.a IN (${ph}) OR r.b IN (${ph})) AND r.type IN ('mentioned_together', 'similar') AND i.shelf = 'learning' LIMIT 10`,
+    ).bind(...seeds, ...seeds, ...seeds).all();
+    near.results.forEach((it) => { if (!candidates.some((c) => c.key === `i:${it.id}`)) candidates.push(itemSource(it)); });
+  }
 
   const saveIds = [...new Set(chunkHits.matches.map((m) => String(m.metadata?.save_id)))].filter(Boolean);
   const saves = saveIds.length
@@ -158,7 +169,11 @@ export async function ask(req: Request, env: Env, hybridItems: (q: string, limit
       source: { type: "save", save_id: s.id, title: `${s.creator ?? s.kind_hint} · ${s.kind_hint}`, url: s.url, kind: s.kind_hint },
     });
   }
-  if (!candidates.length) return json({ answer: "I couldn't find anything about that in your saves.", sources: [], found: false });
+  if (!candidates.length) {
+    const none = "I couldn't find anything about that in your saves.";
+    if (body.stream) return ndjson([{ type: "sources", sources: [] }, { type: "delta", text: none }, { type: "done", cited: [], found: false, grounded: true }]);
+    return json({ answer: none, sources: [], found: false });
+  }
 
   // Add what the posts claimed (salaries, star counts, "free"...), marked as unverified.
   const itemIds = candidates.filter((c) => c.source.type === "item").map((c) => c.source.item_id!);
@@ -193,13 +208,14 @@ If the sources don't answer the question, say "That isn't in your saves." and st
 Sources marked trust: check or unconfirmed contain claims nobody has verified; say so when you use them.
 Be concise: short paragraphs or a short list. Plain words, no marketing tone, no em dashes.`;
   const history = (body.history ?? []).slice(-6).map((t) => ({ role: t.role, content: t.content.slice(0, 2000) }));
+  const messages = [
+    { role: "system", content: system },
+    ...history,
+    { role: "user", content: `Sources:\n${context}\n\nQuestion: ${q}` },
+  ];
+  if (body.stream) return streamAnswer(env, messages, top);
   const out = (await env.AI.run(ANSWER_MODEL, {
-    messages: [
-      { role: "system", content: system },
-      ...history,
-      { role: "user", content: `Sources:\n${context}\n\nQuestion: ${q}` },
-    ],
-    max_tokens: 900,
+    messages, max_tokens: 900, reasoning: { effort: "low" },
   } as never)) as { response?: string; choices?: { message: { content: string } }[] };
   let answer = (out.response ?? out.choices?.[0]?.message?.content ?? "").trim();
   // gpt-oss sometimes uses 【1】; normalize to [1].
@@ -214,6 +230,64 @@ Be concise: short paragraphs or a short list. Plain words, no marketing tone, no
     found: !refused,
     grounded: refused || cited.length > 0,
   });
+}
+
+// ---------- streaming ----------
+
+function ndjson(lines: unknown[]): Response {
+  return new Response(lines.map((l) => JSON.stringify(l)).join("\n") + "\n", { headers: { "content-type": "application/x-ndjson" } });
+}
+
+/**
+ * The answer as it's written: one JSON object per line. First {type:"sources"} (every numbered source, so the app
+ * can show [n] chips as they appear), then {type:"delta",text} pieces, then {type:"done",cited,found,grounded}.
+ */
+function streamAnswer(env: Env, messages: unknown[], top: Candidate[]): Response {
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const w = writable.getWriter();
+  const enc = new TextEncoder();
+  const send = (o: unknown) => w.write(enc.encode(JSON.stringify(o) + "\n"));
+  (async () => {
+    let answer = "";
+    try {
+      await send({ type: "sources", sources: top.map((c, i) => ({ ...c.source, n: i + 1 })) });
+      const stream = (await env.AI.run(ANSWER_MODEL, {
+        messages, max_tokens: 900, stream: true, reasoning: { effort: "low" },
+      } as never)) as unknown as ReadableStream<Uint8Array>;
+      const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += value;
+        let nl: number;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line.startsWith("data:")) continue;
+          const data = line.slice(5).trim();
+          if (data === "[DONE]") continue;
+          let piece = "";
+          try {
+            const o = JSON.parse(data) as { response?: string; choices?: { delta?: { content?: string } }[] };
+            piece = o.response ?? o.choices?.[0]?.delta?.content ?? "";
+          } catch { continue; }
+          if (!piece) continue;
+          piece = piece.replace(/【(\d+)(?:†[^】]*)?】/g, "[$1]");
+          answer += piece;
+          await send({ type: "delta", text: piece });
+        }
+      }
+      const cited = [...new Set([...answer.matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1])))].filter((n) => n >= 1 && n <= top.length);
+      const refused = /isn.t in your saves|not in your saves/i.test(answer);
+      await send({ type: "done", cited, found: !refused, grounded: refused || cited.length > 0 });
+    } catch (e) {
+      await send({ type: "error", error: e instanceof Error ? e.message : String(e) });
+    } finally {
+      await w.close();
+    }
+  })();
+  return new Response(readable, { headers: { "content-type": "application/x-ndjson", "cache-control": "no-store" } });
 }
 
 // ---------- research (answered by the laptop's Claude with web search) ----------

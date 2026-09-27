@@ -5,7 +5,7 @@ import { downloadApk, latestRelease, publishRelease } from "./updates.ts";
 import { addItemVoice, isOwnAudio, transcribe } from "./voice.ts";
 import { backfillDeadlines, calendar, putDeadline, researchDeadline, upcoming } from "./deadlines.ts";
 import { graph, linkSimilar } from "./graph.ts";
-import { createNote, deleteNote, getNote, listNotes, noteFromVoice, openTasks, purgeTrash, setTask, updateNote } from "./notes.ts";
+import { createNote, deleteNote, getNote, listNotes, noteFromVoice, brainstorm, openTasks, purgeTrash, setTask, updateNote } from "./notes.ts";
 import { ask, claimResearch, createResearch, finishResearch, getResearch, indexSaves, reindex } from "./ask.ts";
 
 export interface Env {
@@ -71,6 +71,8 @@ export default {
       if (path === "/v1/tasks" && req.method === "GET") return await openTasks(env);
       const task = path.match(/^\/v1\/notes\/([0-9a-f]{16})\/task$/);
       if (task && req.method === "POST") return await setTask(task[1], req, env);
+      const bs = path.match(/^\/v1\/notes\/([0-9a-f]{16})\/brainstorm$/);
+      if (bs && req.method === "POST") return await brainstorm(bs[1], req, env);
       if (path === "/v1/notes/voice" && req.method === "POST") return await noteFromVoice(req, env, ctx);
       const note = path.match(/^\/v1\/notes\/([0-9a-f]{16})$/);
       if (note && req.method === "GET") return await getNote(note[1], env);

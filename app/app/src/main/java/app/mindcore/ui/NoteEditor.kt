@@ -129,6 +129,7 @@ fun NoteEditor(
     var status by remember(id) { mutableStateOf("") }
     var picking by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var brainstorming by remember { mutableStateOf(false) }
 
     fun snapshot() = listOf(kind, title, body.text, stage, color, pinned, favorite).joinToString("\u0000")
     fun apply(d: NoteDetail) {
@@ -300,8 +301,14 @@ fun NoteEditor(
                         Text("Done", style = MaterialTheme.typography.labelLarge, color = bg)
                     }
                 } else {
+                    Row(Modifier.clip(RoundedCornerShape(50)).clickable { brainstorming = true }.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        LotusBlob(BlobState.Idle, size = 26.dp, onTap = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Brainstorm", style = MaterialTheme.typography.labelLarge, color = ink)
+                    }
                     Text(wordsLine(body.text), style = MaterialTheme.typography.labelMedium, color = ink.copy(alpha = 0.7f),
-                        modifier = Modifier.weight(1f).padding(start = 14.dp))
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 6.dp))
                     Row(Modifier.clip(RoundedCornerShape(50)).background(ink).clickable { editing = true }.padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = bg)
@@ -316,6 +323,19 @@ fun NoteEditor(
     if (picking) {
         ModalBottomSheet(onDismissRequest = { picking = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
             LinkPicker(linkNames.filter { !it.first.equals(title, ignoreCase = true) }) { name -> insert("[[$name]]"); picking = false }
+        }
+    }
+    if (brainstorming) {
+        ModalBottomSheet(onDismissRequest = { brainstorming = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            Brainstorm(
+                ensureSaved = { save(); noteId },
+                run = { nid, mode -> api.brainstorm(nid, mode) },
+                onAdd = { heading, md ->
+                    val t = body.text.trimEnd()
+                    body = TextFieldValue((if (t.isEmpty()) "" else "$t\n\n") + "## $heading\n$md")
+                    brainstorming = false
+                },
+            )
         }
     }
     if (confirmDelete) {
@@ -475,6 +495,67 @@ private fun LinkPicker(names: List<Pair<String, String>>, onPick: (String) -> Un
                     Text(kindLabels[kind] ?: kind.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall,
                         color = scheme.onSurfaceVariant)
                 }
+            }
+        }
+    }
+}
+
+private val brainstormModes = listOf(
+    "expand" to "Grow it", "questions" to "Question it", "next" to "Next steps", "connect" to "Connect my saves",
+)
+
+/** Pick how Swan should help; the answer shows as a page you can add to the note (or ask again). */
+@Composable
+private fun Brainstorm(ensureSaved: suspend () -> String?, run: suspend (String, String) -> String, onAdd: (String, String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var mode by remember { mutableStateOf("expand") }
+    var result by remember { mutableStateOf<String?>(null) }
+    var working by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    fun go() {
+        working = true; error = null; result = null
+        scope.launch {
+            runCatching {
+                val nid = ensureSaved() ?: error("Write a few words first")
+                run(nid, mode)
+            }.onSuccess { result = it }.onFailure { error = it.message }
+            working = false
+        }
+    }
+    val scheme = MaterialTheme.colorScheme
+    Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp).heightIn(max = 640.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            LotusBlob(if (working) BlobState.Thinking else if (result != null) BlobState.Wink else BlobState.Idle, size = 48.dp, onTap = null)
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text("Brainstorm with Swan", style = MaterialTheme.typography.headlineSmall)
+                Text(if (working) "Thinking it through with what you've saved…" else "Uses this note and the things you saved.",
+                    style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+            }
+        }
+        PillTabs(brainstormModes, mode, { mode = it; result = null }, contentPadding = PaddingValues(0.dp))
+        error?.let { Text(it, color = scheme.error, style = MaterialTheme.typography.bodySmall) }
+        result?.let { md ->
+            Box(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).clip(RoundedCornerShape(20.dp))
+                .background(scheme.surfaceContainerHigh).padding(16.dp)) {
+                Rendered(md, scheme.onSurface, onToggle = {}, onLink = {}, modifier = Modifier.fillMaxWidth())
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            val label = brainstormModes.first { it.first == mode }.second
+            Row(
+                Modifier.weight(1f).clip(RoundedCornerShape(50)).background(if (working) scheme.surfaceContainerHigh else if (result == null) scheme.inverseSurface else scheme.surfaceContainerHigh)
+                    .clickable(enabled = !working) { go() }.padding(vertical = 15.dp),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text(if (working) "Thinking…" else if (result == null) label else "Try again", style = MaterialTheme.typography.labelLarge,
+                    color = if (result == null && !working) scheme.inverseOnSurface else scheme.onSurface)
+            }
+            result?.let { md ->
+                Row(
+                    Modifier.weight(1f).clip(RoundedCornerShape(50)).background(scheme.inverseSurface).clickable { onAdd(label, md) }.padding(vertical = 15.dp),
+                    horizontalArrangement = Arrangement.Center,
+                ) { Text("Add to note", style = MaterialTheme.typography.labelLarge, color = scheme.inverseOnSurface) }
             }
         }
     }

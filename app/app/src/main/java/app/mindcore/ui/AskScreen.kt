@@ -78,6 +78,7 @@ data class ChatMessage(
     val question: String? = null, // for "Research online" on an answer
     val pending: Boolean = false,
     val research: Boolean = false,
+    val streaming: Boolean = false, // still being written
 )
 
 /** Chat state lives above the tabs, so switching tabs doesn't wipe the conversation. */
@@ -95,7 +96,7 @@ private val suggestions = listOf(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AskScreen(state: AskState, api: Api?, research: Research, onOpenItem: (String) -> Unit) {
+fun AskScreen(state: AskState, api: Api?, research: Research, onOpenItem: (String) -> Unit, onOpenNote: (String) -> Unit = {}) {
     var input by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -112,7 +113,15 @@ fun AskScreen(state: AskState, api: Api?, research: Research, onOpenItem: (Strin
         state.busy = true
         scope.launch {
             val reply = try {
-                val a = api.ask(question, history)
+                // Words appear as they're written; Swan keeps thinking until the first one arrives.
+                val live = StringBuilder()
+                val a = api.askStream(question, history) { piece ->
+                    live.append(piece)
+                    val text = live.toString()
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        state.messages[state.messages.lastIndex] = ChatMessage(false, text, question = question, streaming = true)
+                    }
+                }
                 ChatMessage(false, a.answer, a.sources, notInSaves = !a.found, question = question)
             } catch (e: Exception) {
                 ChatMessage(false, e.message ?: "Couldn't reach the server")
@@ -182,7 +191,7 @@ fun AskScreen(state: AskState, api: Api?, research: Research, onOpenItem: (Strin
                 }
             }
             itemsIndexed(state.messages) { _, m ->
-                if (m.fromUser) UserBubble(m.text) else Reply(m, onOpenItem, onResearch = { researchOnline(it) }, onOpenUrl = { url ->
+                if (m.fromUser) UserBubble(m.text) else Reply(m, onOpenItem, onOpenNote, onResearch = { researchOnline(it) }, onOpenUrl = { url ->
                     openLink(context, url)
                 })
             }
@@ -230,7 +239,7 @@ private fun UserBubble(text: String) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Reply(m: ChatMessage, onOpenItem: (String) -> Unit, onResearch: (String) -> Unit, onOpenUrl: (String) -> Unit) {
+private fun Reply(m: ChatMessage, onOpenItem: (String) -> Unit, onOpenNote: (String) -> Unit, onResearch: (String) -> Unit, onOpenUrl: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(end = 24.dp)) {
         if (m.research) Text("Researched online", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary)
         if (m.pending) {
@@ -242,13 +251,13 @@ private fun Reply(m: ChatMessage, onOpenItem: (String) -> Unit, onResearch: (Str
             }
             return@Column
         }
-        Text(markdown(m.text, MaterialTheme.colorScheme.primary), style = MaterialTheme.typography.bodyLarge)
+        Text(markdown(if (m.streaming) m.text + " ▍" else m.text, MaterialTheme.colorScheme.primary), style = MaterialTheme.typography.bodyLarge)
         if (m.sources.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             m.sources.forEach { s ->
                 Text(
                     "${s.n}  ${s.title}", style = MaterialTheme.typography.labelMedium, maxLines = 1,
                     modifier = Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .clickable { s.itemId?.let(onOpenItem) ?: s.url?.let(onOpenUrl) }
+                        .clickable { s.itemId?.let(onOpenItem) ?: s.noteId?.let(onOpenNote) ?: s.url?.let(onOpenUrl) }
                         .padding(horizontal = 12.dp, vertical = 7.dp),
                 )
             }
