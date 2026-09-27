@@ -1,3 +1,8 @@
+import java.util.Properties
+
+// Bumped by `mindcore release`; every published build must have a higher versionCode.
+val appVersion = Properties().apply { file("version.properties").inputStream().use { load(it) } }
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -12,8 +17,8 @@ android {
         // Glass needs RenderEffect/RuntimeShader (Android 13+); older phones get plain blur later.
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.0.1-m0"
+        versionCode = appVersion.getProperty("versionCode").toInt()
+        versionName = appVersion.getProperty("versionName")
     }
 
     buildTypes {
@@ -25,6 +30,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

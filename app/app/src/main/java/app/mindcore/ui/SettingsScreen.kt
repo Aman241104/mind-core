@@ -43,11 +43,18 @@ import app.mindcore.settings.AppSettings
 import app.mindcore.settings.PhoneAi
 import app.mindcore.settings.Research
 import app.mindcore.settings.ThemeMode
+import app.mindcore.BuildConfig
+import app.mindcore.update.UpdateBanner
+import app.mindcore.update.UpdateState
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
     onChange: ((AppSettings) -> AppSettings) -> Unit,
+    updates: UpdateState,
     onOpenGlass: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -168,7 +175,25 @@ fun SettingsScreen(
         item { Section("About") }
         item {
             Group {
-                Info("mind-core", "0.0.1 · M0 test build")
+                Info("mind-core", "Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                Divider()
+                val scope = rememberCoroutineScope()
+                Row(
+                    Modifier.fillMaxWidth().clickable { scope.launch { updates.check(manual = true) } }
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Check for updates", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            updates.message ?: updates.release?.let { "Version ${it.versionName} is ready. Update from For You." }
+                                ?: "New versions come from your own server.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (updates.checking) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                }
+                updates.release?.let { UpdateBanner(updates, Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) }
                 Divider()
                 Info("Glass", "Kyant0/backdrop and its catalog components, Apache License 2.0")
                 Divider()

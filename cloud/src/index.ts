@@ -1,12 +1,14 @@
 // mind-core API on Cloudflare Workers: saves in, items out, jobs for the laptop brain, hybrid search.
 import { kindHint, normalizeUrl, shortHash, triage } from "./links.ts";
 import { chatLinks } from "./whatsapp.ts";
+import { downloadApk, latestRelease, publishRelease } from "./updates.ts";
 import { ask, claimResearch, createResearch, finishResearch, getResearch, indexSaves, reindex } from "./ask.ts";
 
 export interface Env {
   DB: D1Database;
   VEC: VectorizeIndex;
   VEC_CHUNKS: VectorizeIndex; // saved text (transcripts, captions, screen text) for Ask
+  APPS: KVNamespace; // app builds for in-app updates
   AI: Ai;
   API_TOKEN: string; // the phone
   BRAIN_TOKEN: string; // the laptop
@@ -41,6 +43,7 @@ export default {
         if (path === "/v1/brain/complete" && req.method === "POST") return await complete(req, env);
         if (path === "/v1/brain/fail" && req.method === "POST") return await fail(req, env);
         if (path === "/v1/brain/reindex" && req.method === "POST") return await reindex(env);
+        if (path === "/v1/brain/app" && req.method === "POST") return await publishRelease(req, env);
         if (path === "/v1/brain/research/claim" && req.method === "POST") return await claimResearch(env);
         const done = path.match(/^\/v1\/brain\/research\/(\d+)$/);
         if (done && req.method === "POST") return await finishResearch(Number(done[1]), req, env);
@@ -60,6 +63,9 @@ export default {
       if (path === "/v1/search" && req.method === "POST") return await search(req, env);
       if (path === "/v1/ask" && req.method === "POST") return await ask(req, env, (q, limit) => hybridItems(env, q, {}, limit));
       if (path === "/v1/research" && req.method === "POST") return await createResearch(req, env);
+      if (path === "/v1/app/latest" && req.method === "GET") return await latestRelease(env);
+      const apk = path.match(/^\/v1\/app\/apk\/(\d+)$/);
+      if (apk && req.method === "GET") return await downloadApk(Number(apk[1]), env);
       const research = path.match(/^\/v1\/research\/(\d+)$/);
       if (research && req.method === "GET") return await getResearch(Number(research[1]), env);
       if (path === "/v1/status" && req.method === "GET") return await status(env);

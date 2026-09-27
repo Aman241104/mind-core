@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from urllib.parse import quote
 import json
 from collections import Counter
 from dataclasses import asdict
@@ -105,6 +106,38 @@ def cmd_reindex(args: argparse.Namespace) -> None:
             break
 
 
+def cmd_release(args: argparse.Namespace) -> None:
+    """Bump the app version, build it, and publish it so the phone offers the update."""
+    import os
+    import subprocess
+
+    from .brain import Api
+
+    app = Path.home() / "stash" / "app"
+    props = app / "app" / "version.properties"
+    v = dict(line.split("=", 1) for line in props.read_text().splitlines() if "=" in line)
+    code = int(v["versionCode"]) + 1
+    major, minor, patch = (int(x) for x in v["versionName"].split("."))
+    name = f"{major}.{minor}.{patch + 1}" if not args.minor else f"{major}.{minor + 1}.0"
+    props.write_text(f"versionCode={code}\nversionName={name}\n")
+    env = dict(os.environ, JAVA_HOME=str(Path.home() / ".local/share/jdk/jdk-21.0.12.1+1"),
+               ANDROID_HOME=str(Path.home() / "Android/Sdk"))
+    print(f"building {name} ({code})…")
+    r = subprocess.run(["./gradlew", "-q", "assembleDebug"], cwd=app, env=env, capture_output=True, text=True)
+    if r.returncode != 0:
+        props.write_text(f"versionCode={v['versionCode']}\nversionName={v['versionName']}\n")  # undo the bump
+        raise SystemExit("build failed:\n" + (r.stdout + r.stderr)[-2000:])
+    apk = app / "app/build/outputs/apk/debug/app-debug.apk"
+    api = Api()
+    resp = api.http.post("/v1/brain/app", content=apk.read_bytes(), timeout=300, headers={
+        "content-type": "application/vnd.android.package-archive",
+        "x-version-code": str(code), "x-version-name": name, "x-notes": quote(args.notes or ""),
+    })
+    if resp.status_code >= 400:
+        raise SystemExit(f"upload failed: {resp.text}")
+    print(f"published {name} ({code}), {apk.stat().st_size // 1024} KB. The phone will offer it on next open.")
+
+
 def cmd_status(args: argparse.Namespace) -> None:
     from .brain import Api
 
@@ -134,6 +167,10 @@ def main() -> None:
     p.set_defaults(func=cmd_reverify)
     p = sub.add_parser("reindex", help="index processed saves' text for Ask")
     p.set_defaults(func=cmd_reindex)
+    p = sub.add_parser("release", help="build the app and publish it as an in-app update")
+    p.add_argument("--notes", help="what's new (shown in the update banner)")
+    p.add_argument("--minor", action="store_true", help="bump 0.x instead of 0.x.y")
+    p.set_defaults(func=cmd_release)
     p = sub.add_parser("status", help="show API status: laptop, jobs, saves, items")
     p.set_defaults(func=cmd_status)
     args = parser.parse_args()

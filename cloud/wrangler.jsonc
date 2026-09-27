@@ -12,6 +12,7 @@
     { "binding": "VEC_CHUNKS", "index_name": "mindcore-chunks", "remote": true }
   ],
   "ai": { "binding": "AI", "remote": true },
+  "kv_namespaces": [{ "binding": "APPS", "id": "83ee0d8286ab4288a9b6a4f7e731c42d", "remote": true }],
   // Hands back jobs whose worker vanished mid-lease.
   "triggers": { "crons": ["*/5 * * * *"] }
 }

@@ -57,6 +57,8 @@ import app.mindcore.data.Api
 import app.mindcore.data.Capture
 import app.mindcore.data.Capturer
 import app.mindcore.data.Library
+import app.mindcore.update.UpdateState
+import app.mindcore.update.Updater
 import app.mindcore.settings.AppSettings
 import app.mindcore.settings.SettingsStore
 import app.mindcore.ui.theme.colorSchemeFor
@@ -80,6 +82,10 @@ fun MindCoreApp() {
         Library(if (settings.apiToken.isBlank()) null else Api(settings.serverUrl, settings.apiToken))
     }
     LaunchedEffect(library) { library.refresh() }
+    val updates = remember(settings.serverUrl, settings.apiToken) {
+        UpdateState(if (settings.apiToken.isBlank()) null else Updater(context.applicationContext, settings.serverUrl, settings.apiToken))
+    }
+    LaunchedEffect(updates) { updates.check() }
 
     MaterialTheme(colorScheme = scheme) {
         var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -112,7 +118,7 @@ fun MindCoreApp() {
                             onChange = { g -> update { it.copy(glass = g) } },
                             onBack = { showGlass = false },
                         )
-                        showSettings -> SettingsScreen(settings, update, onOpenGlass = { showGlass = true }) { showSettings = false }
+                        showSettings -> SettingsScreen(settings, update, updates, onOpenGlass = { showGlass = true }) { showSettings = false }
                         itemId != null && api != null -> ItemScreen(
                             id = itemId, api = api,
                             onBack = { openItem = null },
@@ -121,6 +127,7 @@ fun MindCoreApp() {
                         )
                         tab == 0 -> ForYouScreen(
                             library,
+                            updates,
                             onSettings = { showSettings = true },
                             onOpen = { id -> openItem = id },
                             onOpenKind = { k -> libraryKind = k; tab = 1 },

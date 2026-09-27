@@ -53,6 +53,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.mindcore.data.ApiItem
 import app.mindcore.data.Library
+import app.mindcore.update.UpdateBanner
+import app.mindcore.update.UpdateState
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -64,6 +66,7 @@ import java.time.temporal.ChronoUnit
 @Composable
 fun ForYouScreen(
     library: Library,
+    updates: UpdateState,
     onSettings: () -> Unit,
     onOpen: (String) -> Unit,
     onOpenKind: (String?) -> Unit,
@@ -83,6 +86,7 @@ fun ForYouScreen(
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 140.dp)) {
             item { Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars)) }
             item { Header(onSettings) }
+            item { UpdateBanner(updates, Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) }
             item { Processing(library) }
             if (!library.paired) item {
                 Box(Modifier.padding(16.dp)) {
