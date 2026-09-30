@@ -610,10 +610,34 @@ wishlist, job-market/employment context per country, a scholarships guide). Back
 ### Integration — done (see the Space Switcher and Plan-screen sections above for the actual history)
 The original plan here (push routes off Settings, manual wiring) was superseded by the space-switcher
 redesign. IELTS/News are bottom-tab peers in the Abroad space, not pushed routes.
-- **Still open:** the diff→`uni_news` ingestion step for the Firecrawl monitors (raw page-diff → an LLM call
-  producing `{headline, summary, kind}` rows) — monitors are running and collecting diffs, nothing turns them
-  into visible news yet. Netherlands/Germany monitor URLs also still need their exact scholarship-page deep
-  links confirmed (only had domain-level references).
+
+### News ingestion pipeline — done (2026-09-30, same day)
+The diff→`uni_news` gap flagged above is closed. `POST /v1/news/webhook?key=...` (new, `src/news.ts`) receives
+Firecrawl's monitor webhook directly — no Bearer auth available since Firecrawl calls it, so it's gated by a
+shared secret in the query string instead (`NEWS_WEBHOOK_KEY`, stored as a Worker secret + in
+`.secrets/tokens.env`). On a `status: "changed"` page it calls `env.AI` (same `gpt-oss-120b` low-effort/2000-
+token pattern as `ielts.ts`) to turn the diff into `{university, country, headline, summary, kind}`, then
+dedupes into `uni_news` exactly like the existing manual `ingestNews` path.
+- **The real webhook payload was captured live via `wrangler tail` against an actual Firecrawl call**, not
+  guessed — the first implementation's field-path guesses (`body.event`, `body.pages`/`results`/`page`) were
+  all wrong. Real shape: top-level `type` (`"monitor.page"` | `"monitor.check.completed"`), page data under
+  `data[]`, and `diff` is `null` on `"new"` (first-seen baseline) pages — only `"changed"` carries real diff
+  text, which is also the only status semantically worth turning into news (a baseline isn't itself an
+  update). `isMeaningful === false` (Firecrawl's own judge, `judgeEnabled: true` on every monitor) is also
+  respected as an early skip.
+- Netherlands and Germany monitors created (the domain-level-only gap from the original plan) with real deep
+  links found via live search, not the vague ones originally flagged: TU Delft + UvA admission/fee/scholarship
+  pages, RWTH Aachen + TU Munich admission/program pages. All four monitors (Ireland, NZ, NL, DE) now point at
+  the same webhook, confirmed via a final `monitor_list` check — all active, all with baselines established.
+- **Verified end-to-end**, not just deployed: a synthetic `"changed"` webhook call (real HTTP POST to the live
+  endpoint, not a unit test) produced a correctly-extracted `uni_news` row — right university/country, a
+  well-written headline combining two separate facts from the diff, correct `kind: "scholarship"` — confirmed
+  via direct D1 query, then deleted since it wasn't real data.
+- Firecrawl's monitor API has a tight rate limit (3 req/min on this tier) — hit it twice while setting this
+  up; paced subsequent calls with short waits rather than retrying blind.
+- **Next real signal won't arrive until the Monday 2026-10-05 09:00 UTC scheduled check** (or a manual
+  `firecrawl_monitor_run`) actually detects a live page change — the synthetic test proves the pipeline works,
+  not that a real university page has changed yet.
 
 ### Job-market research + deeper content (2026-09-30, same day, continued)
 Aman asked for research on "what's next" after the Plan screen shipped — future-proof specializations, job
