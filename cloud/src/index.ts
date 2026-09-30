@@ -11,7 +11,7 @@ import { createBoard, deleteBoard, getBoard, listBoards, saveBoard, suggestCards
 import { createNote, deleteNote, getNote, listNotes, noteFromVoice, brainstorm, openTasks, purgeTrash, setTask, updateNote } from "./notes.ts";
 import { ask, claimResearch, createResearch, finishResearch, getResearch, indexSaves, reindex } from "./ask.ts";
 import { getTask, listAttempts, listResources, listTasks, progress, seedContent, submitAttempt } from "./ielts.ts";
-import { ingestNews, listNews, markSeen } from "./news.ts";
+import { ingestNews, ingestWebhook, listNews, markSeen } from "./news.ts";
 import { listPlanActions, listPlanMarket, listPlanScholarships, listPlanUniversities, seedPlan, toggleWishlist } from "./plan.ts";
 
 export interface Env {
@@ -23,6 +23,7 @@ export interface Env {
   API_TOKEN: string; // the phone
   BRAIN_TOKEN: string; // the laptop
   CLOUDINARY_URL?: string; // cloudinary://key:secret@cloud, for screenshot uploads
+  NEWS_WEBHOOK_KEY: string; // shared secret in the Firecrawl monitor webhook URL's ?key= param
 }
 
 const EMBED_MODEL = "@cf/baai/bge-m3"; // multilingual (Hindi/Hinglish), 1024 dims
@@ -46,6 +47,8 @@ export default {
     const path = url.pathname;
     try {
       if (path === "/v1/health") return json({ ok: true });
+      // Called directly by Firecrawl's servers, not the phone or the laptop — gated by its own ?key= check.
+      if (path === "/v1/news/webhook" && req.method === "POST") return await ingestWebhook(req, env);
       if (path.startsWith("/v1/brain/")) {
         if (!authorized(req, env, "brain")) return bad("unauthorized", 401);
         if (path === "/v1/brain/heartbeat" && req.method === "POST") return await heartbeat(req, env);
