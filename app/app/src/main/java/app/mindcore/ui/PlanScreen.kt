@@ -56,6 +56,7 @@ fun PlanScreen(api: Api, onBack: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var countryFilter by rememberSaveable { mutableStateOf<String?>(null) }
 
     var actions by remember { mutableStateOf<List<PlanAction>>(emptyList()) }
     var universities by remember { mutableStateOf<List<PlanUniversity>>(emptyList()) }
@@ -101,15 +102,28 @@ fun PlanScreen(api: Api, onBack: () -> Unit) {
                 items(actions, key = { it.id }) { a -> ActionCard(a, scheme) }
                 item { Spacer(Modifier.height(24.dp)) }
             }
-            tab == 1 -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(universities, key = { it.id }) { u ->
-                    UniversityCard(u, scheme, onToggleWishlist = {
-                        universities = universities.map { if (it.id == u.id) it.copy(wishlisted = !it.wishlisted) else it }
-                        scope.launch { runCatching { api.toggleWishlist(u.id) } }
-                    })
+            tab == 1 -> {
+                val countries = remember(universities) { universities.map { it.country }.distinct() }
+                val filtered = remember(universities, countryFilter) {
+                    countryFilter?.let { c -> universities.filter { it.country == c } } ?: universities
                 }
-                item { Spacer(Modifier.height(24.dp)) }
+                Column(Modifier.fillMaxSize()) {
+                    PillTabs(
+                        options = listOf<Pair<String?, String>>(null to "All") + countries.map { it to it },
+                        selected = countryFilter, onSelect = { countryFilter = it },
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(filtered, key = { it.id }) { u ->
+                            UniversityCard(u, scheme, onToggleWishlist = {
+                                universities = universities.map { if (it.id == u.id) it.copy(wishlisted = !it.wishlisted) else it }
+                                scope.launch { runCatching { api.toggleWishlist(u.id) } }
+                            })
+                        }
+                        item { Spacer(Modifier.height(24.dp)) }
+                    }
+                }
             }
             tab == 2 -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
