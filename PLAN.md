@@ -607,9 +607,45 @@ wishlist, job-market/employment context per country, a scholarships guide). Back
   meantime).
 - **Android UI** (`ui/NewsScreen.kt`): delegated alongside IeltsScreen.kt in the same opencode run.
 
-### Integration still needed (not delegated — done by hand, small and risky enough to keep control of)
-- Wire `IeltsScreen`/`NewsScreen` into `MindCoreApp.kt`'s route stack (`push("ielts")`, `push("news")`) and add
-  entry points (buttons) somewhere on `ForYouScreen` or `SettingsScreen`.
-- A real device/build check after wiring (`./gradlew :app:assembleDebug` + install), since opencode only ran
-  `compileDebugKotlin`.
-- The diff→`uni_news` ingestion step for the Firecrawl monitors above.
+### Integration — done (see the Space Switcher and Plan-screen sections above for the actual history)
+The original plan here (push routes off Settings, manual wiring) was superseded by the space-switcher
+redesign. IELTS/News are bottom-tab peers in the Abroad space, not pushed routes.
+- **Still open:** the diff→`uni_news` ingestion step for the Firecrawl monitors (raw page-diff → an LLM call
+  producing `{headline, summary, kind}` rows) — monitors are running and collecting diffs, nothing turns them
+  into visible news yet. Netherlands/Germany monitor URLs also still need their exact scholarship-page deep
+  links confirmed (only had domain-level references).
+
+### Job-market research + deeper content (2026-09-30, same day, continued)
+Aman asked for research on "what's next" after the Plan screen shipped — future-proof specializations, job
+roles/skills, and to keep expanding. Real research each time, not fabrication; gaps stated explicitly rather
+than guessed at.
+- **Synthesis:** applied AI/software engineering is more reliably employable than pure ML/data-science
+  research at the entry level (consistent theme across industry sources) — Aman's actual portfolio (full-
+  stack + RAG/agent integration, not theoretical ML) already matches that profile. Current shortlist doesn't
+  need rethinking; the real gap is **MLOps and AI governance**, named as 2026 in-demand skills in Ireland
+  specifically that his projects haven't touched.
+- `plan_market` gained `skills_demand` (migration 0016) and `salary_range` (migration 0017) columns, filled
+  with real per-country findings: Ireland's named skills (MLOps, ethical AI governance, generative AI
+  integration), the EU-wide applied-AI-over-pure-research pattern, Germany's experience-favoring market (one
+  recruiter's read: the 2026 "sweet spot" is 5-10 YOE, tempering fresh-grad expectations), and an honest
+  "no NZ-specific data found" flag. Salary figures are presented as ranges with sourcing caveats — the
+  Netherlands sources genuinely disagreed (one thread cited senior devs at €100-200k, an aggregator showed
+  ~$45k average) and that disagreement is stated in the UI rather than resolved by picking one number.
+- `plan_universities` expanded from the cross-country top-7 to 25 — pulled the fuller per-country tables
+  already researched in the plan doc (Ireland's own list had 6 total, Netherlands 3 more, Germany 4 separate
+  entries replacing the placeholder "RWTH/Stuttgart" combo, Finland/Sweden/France 4, NZ 5). Also deepened the
+  previously-"not deep-dived" France/Finland/Sweden/Uppsala/Lund entries with real entry requirements and
+  deadlines (CentraleSupélec's 240-ECTS Engineering/Math/Physics criterion is a direct match for Aman's
+  degree; Helsinki's 2027 application window is a narrow 5–19 Jan 2027; Uppsala's sourced deadline looks like
+  it's for the prior cycle — flagged for re-verification, not silently used).
+- `PlanScreen.kt`'s Universities tab got a country filter chip row (25 flat cards was too much to scroll
+  blind) — reuses `PillTabs`, no new component needed.
+- Added 2 concrete `plan_actions` entries directly answering the MLOps skills gap: the free MLOps Zoomcamp
+  course (datatalks.club — Docker/MLflow/monitoring/CI-CD, real portfolio project, not just a certificate),
+  and redeploying an existing project (WhatsApp AI Agent or the job-search SaaS) with production-grade
+  monitoring instead of ad-hoc deployment — turns the learning into a resume line, not just a course name.
+- **Verified live on-device throughout** (wireless adb was still connected from earlier in the session) —
+  caught one real mistake mid-session: a stray tap opened a GitHub link in a Chrome Custom Tab instead of the
+  intended switcher pill; caught via `dumpsys window | grep mCurrentFocus` before continuing, not assumed.
+  Lesson for next time: check foreground focus after every navigation tap, not just after crash-prone ones.
+- Published as 0.9.4 (23) via `mindcore release`.
