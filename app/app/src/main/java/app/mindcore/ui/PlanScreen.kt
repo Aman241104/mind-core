@@ -180,6 +180,11 @@ private fun MarketCard(m: PlanMarket, scheme: ColorScheme) {
         Text(m.country, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = scheme.onSurface)
         Text("Post-study visa: ${m.postStudyVisa}", style = MaterialTheme.typography.bodyMedium, color = scheme.onSurface)
         Text(m.outlook, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+        m.skillsDemand?.let {
+            Text("In-demand skills", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+                color = scheme.primary, modifier = Modifier.padding(top = 6.dp))
+            Text(it, style = MaterialTheme.typography.bodySmall, color = scheme.onSurface)
+        }
         m.sourceNote?.let {
             Text("Source: $it", style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp))

@@ -135,7 +135,10 @@ data class PlanUniversity(
     val tuition: String?, val scholarship: String?, val whyFits: String?, val wishlisted: Boolean,
 )
 
-data class PlanMarket(val id: String, val country: String, val postStudyVisa: String, val outlook: String, val sourceNote: String?)
+data class PlanMarket(
+    val id: String, val country: String, val postStudyVisa: String, val outlook: String,
+    val sourceNote: String?, val skillsDemand: String?,
+)
 
 data class PlanScholarship(
     val id: String, val name: String, val place: String,
@@ -639,7 +642,7 @@ class Api(private val baseUrl: String, private val token: String) {
         return (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             PlanMarket(o.getString("id"), o.getString("country"), o.getString("post_study_visa"),
-                o.getString("outlook"), o.optStringOrNull("source_note"))
+                o.getString("outlook"), o.optStringOrNull("source_note"), o.optStringOrNull("skills_demand"))
         }
     }
 
