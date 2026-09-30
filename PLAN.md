@@ -547,9 +547,15 @@ Today tab, and the new `AbroadHomeScreen`) — same place, same look, both sides
   itself gives enough separation from content). **Not yet applied:** GraphScreen/CalendarScreen/ItemScreen's
   own back-arrow chrome and other existing icon buttons elsewhere in the app — same treatment, follow-up pass.
 - Verified: `./gradlew :app:compileDebugKotlin` and `:app:assembleDebug` both green. No device reachable
-  from this sandbox (`adb devices` empty even with USB debugging on) — **on-device install + visual check
-  still needed on Aman's end** before this ships (`./gradlew :app:installDebug` or reinstall from Android
-  Studio), especially the space switcher's tap targets and the glass buttons' contrast in both themes.
+  from this sandbox (`adb devices` empty over both USB and wireless debugging — this sandbox has no path
+  to the phone at all, not a permissions issue). Used the existing `mindcore release` flow instead
+  (`brain/.venv/bin/mindcore release --notes "..."`, NOT `python -m mindcore.cli` — that silently no-ops
+  from this environment, exit 0 with zero output, for reasons not yet diagnosed; the installed console
+  script works) — built the release APK and POSTed it to `/v1/brain/app`. **Published as 0.9.1 (20)
+  2026-09-30; the phone offers it as an in-app update on next open, no adb needed.**
+- **Still needed on Aman's end:** open the app, take the update, then actually test — space switcher tap
+  targets, Abroad bottom tabs, a real IELTS practice submission end-to-end, and the glass icon buttons'
+  contrast in both light and dark theme. Nothing beyond compile+build was verified live.
 
 ### University News
 - **Schema** (`migrations/0013_news.sql`): `uni_news` (university, country, source_url, headline, summary, kind,
