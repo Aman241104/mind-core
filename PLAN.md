@@ -538,24 +538,61 @@ Today tab, and the new `AbroadHomeScreen`) — same place, same look, both sides
   quick-action row, latest 3 unseen news items, link out to the "MS Abroad Plan" doc. `IeltsScreen`/
   `NewsScreen` had their back-arrow header removed (they're bottom-tab peers now, not pushed modals) and
   point-fixed as above.
-- Per Aman's ask, foreground icon buttons (header actions, toggles) now use a real frosted-glass surface
-  instead of a flat `surfaceContainerHigh` circle: new `GlassIconButton` in `Chrome.kt`, reusing the same
-  `drawBackdrop`/`vibrancy`/`blur`/`lens` recipe `CaptureButton` already used for the bottom bar's "+".
-  Applied to `ForYouScreen`'s Header (Graph/Calendar/Settings), `AbroadHomeScreen`'s "open plan" button,
-  and `NewsScreen`'s unseen-toggle. Uses a fixed tint rather than the bottom bar's adaptive-contrast
-  sampling (that needs its own recorded backdrop layer per floating element — skipped for now, glass
-  itself gives enough separation from content). **Not yet applied:** GraphScreen/CalendarScreen/ItemScreen's
-  own back-arrow chrome and other existing icon buttons elsewhere in the app — same treatment, follow-up pass.
-- Verified: `./gradlew :app:compileDebugKotlin` and `:app:assembleDebug` both green. No device reachable
-  from this sandbox (`adb devices` empty over both USB and wireless debugging — this sandbox has no path
-  to the phone at all, not a permissions issue). Used the existing `mindcore release` flow instead
-  (`brain/.venv/bin/mindcore release --notes "..."`, NOT `python -m mindcore.cli` — that silently no-ops
-  from this environment, exit 0 with zero output, for reasons not yet diagnosed; the installed console
-  script works) — built the release APK and POSTed it to `/v1/brain/app`. **Published as 0.9.1 (20)
-  2026-09-30; the phone offers it as an in-app update on next open, no adb needed.**
-- **Still needed on Aman's end:** open the app, take the update, then actually test — space switcher tap
-  targets, Abroad bottom tabs, a real IELTS practice submission end-to-end, and the glass icon buttons'
-  contrast in both light and dark theme. Nothing beyond compile+build was verified live.
+- First glass-button attempt put `GlassIconButton` (header icons) *inside* the same
+  `Box(Modifier.layerBackdrop(backdrop))` that records screen content for the bottom bar's glass to sample —
+  a glass surface trying to read a recording that includes itself. **This crashed the app on every launch**:
+  confirmed via real logcat (wireless adb) as a RenderThread stack overflow (`Cause: stack pointer is not in
+  a rw map`), not a hunch. Fixed by moving the space switcher + header/plan/news icon buttons to a floating
+  top bar in `MindCoreApp.kt` that sits *outside* the recorded tree, as a sibling — same pattern `BottomBar`
+  already used safely. `GlassIconButton` now carries a doc comment spelling out the constraint so it doesn't
+  get misused into scrolling content again.
+- Per Aman's follow-up ask, replaced the space switcher's separate-pills look with a real **sliding
+  segmented toggle** (one track, an animated thumb that glides between labels) — `SpaceSwitcher` in
+  `Components.kt`, using `onGloballyPositioned` to measure each segment's real x/width/height and
+  `animateDpAsState` for the glide. First version used `fillMaxHeight()` for the thumb and it filled almost
+  the whole screen — `fillMaxHeight` sizes against the *incoming* constraint from up the tree, not against
+  a sibling's resolved size (that's what `matchParentSize()` is for, which doesn't support a different
+  width). Fixed by capturing height alongside x/width per segment and setting it explicitly.
+- Also fixed while testing live: `Ielts`/`news` list endpoints wrap their arrays in an object
+  (`{"tasks": [...]}`) but `Api.kt` parsed them as bare `JSONArray`s — silently broke Practice/resources/
+  attempts/news (no crash, just empty/wrong data, caught by a raw JSON parse-error string rendering in the
+  UI). And `TaskCard` checked `task.taskType` ("task1"/"task2") instead of `task.skill` ("writing"/
+  "speaking") to decide which submission form to show — no task ever showed one, pre-dates this session's
+  rewrite, missed because it's a semantic bug, not a compile error.
+- **Verified live on-device**, not just compiled: got wireless adb working (`adb connect <phone-ip>:<port>`,
+  the port changes each time — get it fresh from Settings → Developer options → Wireless debugging), then
+  actually installed, launched, screenshotted, and tapped through every space/tab after each fix, catching
+  the stack-overflow crash and both API bugs this way rather than shipping blind again.
+- Published via `mindcore release`: 0.9.1 (20) → 0.9.2 (21) after the Plan-screen work below.
+
+### MS Abroad Plan, native in-app (2026-09-30)
+Aman's ask: stop linking out to the Claude Docs plan for anything — should all be visible in the app
+without needing Chrome or another session — plus wants much more content (fuller university list w/
+wishlist, job-market/employment context per country, a scholarships guide). Backend: `src/plan.ts` +
+`migrations/0014_plan.sql`/`0015_plan_market.sql`.
+- `plan_actions`, `plan_universities` (+ `wishlisted` toggle column), `plan_market`, `plan_scholarships` —
+  seeded with the **real content already researched** in the "MS Abroad Plan" doc (pulled via the Claude
+  Docs connector, not re-typed from memory): 10 urgent action items, 7 top-recommendation universities, 19
+  scholarships with amount/eligibility/deadline.
+- `plan_market` is real, sourced, honestly-caveated content, not fabricated stats: Ireland (Stamp 1G, 24mo,
+  + the 1 Mar 2026 salary-threshold change, + a note that it's Ireland-only — doesn't grant EU-wide work
+  rights, Ireland isn't in Schengen either; EU Blue Card / 5-yr long-term residence are the real paths to
+  intra-EU mobility later), Netherlands (zoekjaar orientation year; NL employment ~80.7% is general, not
+  grad-specific — labeled as such), Germany (18-month post-grad job-seeking permit, distinct from the
+  6-month external Job Seeker Visa), New Zealand (3-yr PSW visa; real Stats NZ/Universities NZ numbers —
+  55% of international grads stay and work, ~15.7% land jobs below their qualification level vs 9.5% of
+  domestic grads — the most solid official numbers of the four).
+- `PlanScreen.kt` (new): pushed route (back-arrow header, not a bottom-tab peer), 4-way `PillTabs` —
+  Actions / Universities / Market / Scholarships. Universities cards have a working wishlist star
+  (optimistic UI + `POST /v1/plan/universities/:id/wishlist`, verified it actually persists server-side).
+  `AbroadHomeScreen`'s "Full plan" and the floating bar's plan-link icon both `push("plan")` now instead of
+  opening a browser.
+- **Not done this pass** (flagged, not silently dropped): the university list is still the cross-country
+  top-7, not the fuller per-country tables from the doc (Ireland alone had 7, Netherlands 4, Germany 5,
+  Finland/Sweden 6, NZ 7 — more rows exist to pull in); no "future-proof course" or specific job-role/skill
+  breakdown content yet (Aman asked for this — needs real research, didn't want to fabricate precision).
+- Verified live end-to-end: all 4 tabs render with real content, wishlist toggle confirmed persisted via a
+  direct API check, zero crashes across the whole session's testing.
 
 ### University News
 - **Schema** (`migrations/0013_news.sql`): `uni_news` (university, country, source_url, headline, summary, kind,
