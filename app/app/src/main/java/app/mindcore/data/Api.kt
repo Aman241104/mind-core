@@ -86,6 +86,48 @@ data class Status(
     val items: Map<String, Int>,
 )
 
+// IELTS data classes
+
+data class IeltsResource(
+    val id: String, val skill: String, val kind: String, val title: String,
+    val url: String?, val note: String?, val bandFocus: String?,
+    val orderHint: Int, val createdAt: String,
+)
+
+data class IeltsTask(
+    val id: String, val skill: String, val taskType: String, val title: String,
+    val prompt: String, val difficulty: String, val createdAt: String,
+)
+
+data class IeltsFeedback(
+    val band: Double?, val strengths: List<String>, val fixes: List<String>, val note: String?,
+)
+
+data class AttemptResult(
+    val id: String, val band: Double?, val scoreRaw: Int?, val scoreTotal: Int?,
+    val feedback: IeltsFeedback?, val note: String?, val taskId: String?, val skill: String,
+)
+
+data class IeltsAttempt(
+    val id: String, val taskId: String?, val mode: String, val skill: String,
+    val scoreRaw: Int?, val scoreTotal: Int?, val band: Double?, val feedback: IeltsFeedback?,
+    val createdAt: String,
+)
+
+data class IeltsSkillProgress(
+    val skill: String, val band: Double, val createdAt: String,
+)
+
+data class IeltsProgress(
+    val bySkill: List<IeltsSkillProgress>, val overallEstimate: Double?,
+)
+
+data class UniNews(
+    val id: String, val university: String, val country: String, val sourceUrl: String,
+    val headline: String, val summary: String?, val kind: String, val detectedAt: String,
+    val seen: Boolean,
+)
+
 class ApiError(message: String) : Exception(message)
 
 data class AskSource(val n: Int, val type: String, val itemId: String?, val url: String?, val title: String, val kind: String?, val noteId: String? = null)
@@ -459,6 +501,114 @@ class Api(private val baseUrl: String, private val token: String) {
             createdAt = o.optString("created_at"),
         )
     }
+
+    // ---------- IELTS prep ----------
+
+    suspend fun ieltsResources(skill: String? = null): List<IeltsResource> {
+        val path = "/v1/ielts/resources" + (skill?.let { "?skill=$it" } ?: "")
+        val arr = JSONArray(call("GET", path))
+        return (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            IeltsResource(
+                o.getString("id"), o.getString("skill"), o.getString("kind"), o.getString("title"),
+                o.optStringOrNull("url"), o.optStringOrNull("note"), o.optStringOrNull("band_focus"),
+                o.optInt("order_hint"), o.getString("created_at"),
+            )
+        }
+    }
+
+    suspend fun ieltsTasks(skill: String? = null, taskType: String? = null): List<IeltsTask> {
+        val q = listOfNotNull(skill?.let { "skill=$it" }, taskType?.let { "task_type=$it" }).joinToString("&")
+        val arr = JSONArray(call("GET", "/v1/ielts/tasks" + if (q.isEmpty()) "" else "?$q"))
+        return (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            IeltsTask(
+                o.getString("id"), o.getString("skill"), o.getString("task_type"), o.getString("title"),
+                o.getString("prompt"), o.getString("difficulty"), o.getString("created_at"),
+            )
+        }
+    }
+
+    suspend fun ieltsTask(id: String): IeltsTask {
+        val o = JSONObject(call("GET", "/v1/ielts/tasks/$id")).getJSONObject("task")
+        return IeltsTask(
+            o.getString("id"), o.getString("skill"), o.getString("task_type"), o.getString("title"),
+            o.getString("prompt"), o.getString("difficulty"), o.getString("created_at"),
+        )
+    }
+
+    suspend fun submitIeltsAttempt(taskId: String?, mode: String, skill: String, response: String): AttemptResult {
+        val b = JSONObject().put("mode", mode).put("skill", skill).put("response", response)
+        taskId?.let { b.put("task_id", it) }
+        val o = JSONObject(call("POST", "/v1/ielts/attempts", b))
+        return AttemptResult(
+            id = o.getString("id"),
+            band = o.optDoubleOrNull("band"),
+            scoreRaw = o.optIntOrNull("score_raw"),
+            scoreTotal = o.optIntOrNull("score_total"),
+            feedback = o.optJSONObject("feedback")?.let { parseIeltsFeedback(it) },
+            note = o.optStringOrNull("note"),
+            taskId = taskId,
+            skill = skill,
+        )
+    }
+
+    suspend fun ieltsAttempts(skill: String? = null): List<IeltsAttempt> {
+        val path = "/v1/ielts/attempts" + (skill?.let { "?skill=$it" } ?: "")
+        val arr = JSONArray(call("GET", path))
+        return (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            val fbStr = o.optStringOrNull("feedback")
+            val fb = fbStr?.let { runCatching { JSONObject(it) }.getOrNull() }
+            IeltsAttempt(
+                o.getString("id"), o.optStringOrNull("task_id"), o.getString("mode"), o.getString("skill"),
+                o.optIntOrNull("score_raw"), o.optIntOrNull("score_total"), o.optDoubleOrNull("band"),
+                fb?.let { parseIeltsFeedback(it) }, o.getString("created_at"),
+            )
+        }
+    }
+
+    suspend fun ieltsProgress(): IeltsProgress {
+        val o = JSONObject(call("GET", "/v1/ielts/progress"))
+        val arr = o.optJSONArray("by_skill") ?: JSONArray()
+        val list = (0 until arr.length()).map { i ->
+            val s = arr.getJSONObject(i)
+            IeltsSkillProgress(
+                s.getString("skill"), s.optDoubleOrNull("band") ?: 0.0, s.getString("created_at"),
+            )
+        }
+        return IeltsProgress(list, o.optDoubleOrNull("overall_estimate"))
+    }
+
+    suspend fun news(unseenOnly: Boolean = false): List<UniNews> {
+        val path = "/v1/news" + if (unseenOnly) "?unseen=1" else ""
+        val arr = JSONArray(call("GET", path))
+        return (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            UniNews(
+                o.getString("id"), o.getString("university"), o.getString("country"), o.getString("source_url"),
+                o.getString("headline"), o.optStringOrNull("summary"), o.getString("kind"),
+                o.getString("detected_at"), o.optInt("seen", 0) == 1,
+            )
+        }
+    }
+
+    suspend fun markNewsSeen(id: String) { call("POST", "/v1/news/$id/seen") }
+
+    private fun parseIeltsFeedback(o: JSONObject): IeltsFeedback {
+        val strengthsArr = o.optJSONArray("strengths") ?: JSONArray()
+        val fixesArr = o.optJSONArray("fixes") ?: JSONArray()
+        return IeltsFeedback(
+            o.optDoubleOrNull("band"),
+            (0 until strengthsArr.length()).map { i -> strengthsArr.getString(i) },
+            (0 until fixesArr.length()).map { i -> fixesArr.getString(i) },
+            o.optStringOrNull("note"),
+        )
+    }
+
+    // Extension functions
+    private fun JSONObject.optIntOrNull(key: String): Int? = if (isNull(key) || !has(key)) null else getInt(key)
+    private fun JSONObject.optDoubleOrNull(key: String): Double? = if (isNull(key) || !has(key)) null else getDouble(key)
 }
 
 private fun JSONObject.optStringOrNull(key: String): String? = if (isNull(key) || !has(key)) null else getString(key)

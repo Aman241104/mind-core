@@ -52,6 +52,20 @@ import androidx.compose.ui.unit.dp
 // Lotus Studio components, from the two reference designs: pill tabs with counts, round icon buttons,
 // and a hero card whose round arrow button sits in a curved notch cut out of the card's corner.
 
+/** The app's two top-level spaces, switched from a pill at the top of each space's home screen. */
+enum class AppSpace { MINDCORE, ABROAD }
+
+@Composable
+fun SpaceSwitcher(selected: AppSpace, onSelect: (AppSpace) -> Unit, modifier: Modifier = Modifier) {
+    PillTabs(
+        options = listOf(AppSpace.MINDCORE to "MindCore", AppSpace.ABROAD to "Study Abroad"),
+        selected = selected,
+        onSelect = onSelect,
+        modifier = modifier,
+        contentPadding = PaddingValues(start = 20.dp, end = 16.dp, top = 12.dp),
+    )
+}
+
 /** Card shape with a round notch at the bottom-right that hugs a button of [buttonSize] + [gap]. */
 class NotchedCardShape(private val radius: Dp, private val buttonSize: Dp, private val gap: Dp) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {

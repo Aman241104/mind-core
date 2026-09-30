@@ -10,6 +10,8 @@ import { dueCards, makeCards, reviewCard } from "./flashcards.ts";
 import { createBoard, deleteBoard, getBoard, listBoards, saveBoard, suggestCards } from "./boards.ts";
 import { createNote, deleteNote, getNote, listNotes, noteFromVoice, brainstorm, openTasks, purgeTrash, setTask, updateNote } from "./notes.ts";
 import { ask, claimResearch, createResearch, finishResearch, getResearch, indexSaves, reindex } from "./ask.ts";
+import { getTask, listAttempts, listResources, listTasks, progress, seedContent, submitAttempt } from "./ielts.ts";
+import { ingestNews, listNews, markSeen } from "./news.ts";
 
 export interface Env {
   DB: D1Database;
@@ -54,6 +56,8 @@ export default {
         if (path === "/v1/brain/app" && req.method === "POST") return await publishRelease(req, env);
         if (path === "/v1/brain/deadlines/backfill" && req.method === "POST") return await backfillDeadlines(env);
         if (path === "/v1/brain/research/claim" && req.method === "POST") return await claimResearch(env);
+        if (path === "/v1/brain/ielts/seed" && req.method === "POST") return await seedContent(req, env);
+        if (path === "/v1/brain/news/ingest" && req.method === "POST") return await ingestNews(req, env);
         const done = path.match(/^\/v1\/brain\/research\/(\d+)$/);
         if (done && req.method === "POST") return await finishResearch(Number(done[1]), req, env);
         const fix = path.match(/^\/v1\/brain\/items\/([0-9a-f]{16})$/);
@@ -96,6 +100,16 @@ export default {
       if (board && !board[2] && req.method === "DELETE") return await deleteBoard(board[1], env);
       if (path === "/v1/calendar" && req.method === "GET") return await calendar(url, env);
       if (path === "/v1/upcoming" && req.method === "GET") return await upcoming(env);
+      if (path === "/v1/ielts/resources" && req.method === "GET") return await listResources(url, env);
+      if (path === "/v1/ielts/tasks" && req.method === "GET") return await listTasks(url, env);
+      if (path === "/v1/ielts/attempts" && req.method === "GET") return await listAttempts(url, env);
+      if (path === "/v1/ielts/attempts" && req.method === "POST") return await submitAttempt(req, env);
+      if (path === "/v1/ielts/progress" && req.method === "GET") return await progress(env);
+      const ieltsTask = path.match(/^\/v1\/ielts\/tasks\/([0-9a-f-]+)$/);
+      if (ieltsTask && req.method === "GET") return await getTask(ieltsTask[1], env);
+      if (path === "/v1/news" && req.method === "GET") return await listNews(url, env);
+      const newsSeen = path.match(/^\/v1\/news\/([0-9a-f]+)\/seen$/);
+      if (newsSeen && req.method === "POST") return await markSeen(newsSeen[1], env);
       const dl = path.match(/^\/v1\/items\/([0-9a-f]{16})\/(deadline|find-deadline)$/);
       if (dl && dl[2] === "deadline" && req.method === "PUT") return await putDeadline(dl[1], req, env);
       if (dl && dl[2] === "find-deadline" && req.method === "POST") return await researchDeadline(dl[1], env);

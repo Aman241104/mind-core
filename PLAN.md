@@ -475,3 +475,98 @@ All four phases are built and deployed; app 0.8.0 published (0.7.0 installed on 
 - **Next:** hands-on phone test of everything since 0.3.0 (graph gestures, boards drag/connect, editor, review flip,
   Talk it out) + edge drawer (task #5); fix what that finds. Then: Obsidian flashcards export (#flashcards format for
   the Spaced Repetition plugin), board ↔ note links in the graph, GitHub description as one-liner for verified repos.
+
+## 17. IELTS prep + University News (started 2026-09-30)
+
+Two new feature areas riding on the existing worker/D1/app instead of a separate project — cheaper and faster than
+a standalone build. Context: Aman is prepping for MS abroad (Ireland/Netherlands/Germany/NZ, Sept 2027 intake —
+see the "MS Abroad Plan" doc) and hasn't taken IELTS yet.
+
+### IELTS prep
+- **Schema** (`migrations/0012_ielts.sql`): `ielts_resources` (curated technique/link content per skill),
+  `ielts_tasks` (writing/speaking prompts, reading passages + answer keys in `content_json`), `ielts_attempts`
+  (graded submissions — band + feedback for writing/speaking, raw score for reading/listening).
+- **Backend** (`src/ielts.ts`): writing/speaking graded via `env.AI` (`gpt-oss-120b`) against the real official
+  IELTS band descriptors embedded as a rubric in the prompt; reading/listening auto-scored against a stored
+  answer key, converted to a band via the official raw-score table **only when the section has ≥35 questions**
+  (a 5-question sample can't map to a band meaningfully — return accuracy only below that, this was a real bug
+  caught during testing, see lesson below). `/v1/ielts/progress` gives latest band per skill + an overall estimate.
+  `/v1/brain/ielts/seed` (brain-token only) bulk-loads resources/tasks — used once already with 19 resources
+  (British Council/IDP/ielts.org/IELTS Liz links + real band 6→7→8 techniques from live research) and 7 starter
+  tasks (2 Writing Task 2, 1 Task 1 chart, 3 Speaking parts, 1 original reading passage — content is
+  LLM/hand-authored, not copied from Cambridge books, to avoid the copyright issue flagged in that research).
+- **Lesson (confirms the P3 one above):** same `gpt-oss-120b` reasoning-budget bug hit again on the grading
+  endpoint — `reasoning: {effort:"medium"}` + `max_tokens: 1200` returned an empty response on a full-length
+  essay (reasoning ate the whole budget). Fixed to `effort:"low"` + `max_tokens: 2000`, plus made JSON extraction
+  from the model's reply more robust (find first `{`...last `}` instead of a strict fence-strip). Verified
+  end-to-end against production: a real ~200-word essay scored band 6.5 with specific, correct feedback.
+  **Rule for any new `env.AI` call in this codebase: always low effort, always ≥1500-2000 max_tokens.**
+- **Android UI** (`ui/IeltsScreen.kt`): Progress / Study Plan / Practice / History tabs — delegated to opencode
+  (see below) against a precise API-contract spec, since it's mechanical Compose work once the backend contract
+  is fixed.
+- **Not yet built:** Listening section content (needs audio — no TTS/audio pipeline set up yet, deferred; link out
+  to British Council's free scored Listening mock in the meantime instead of hosting audio ourselves).
+
+### Fixed 2026-09-30: opencode's Kotlin was never actually compiled
+opencode's delegated output for `IeltsScreen.kt`/`NewsScreen.kt` did not compile at all — every top-level
+function used `defun` instead of `fun` (~22 occurrences), `MaterialTheme.colorScheme` was used as a type
+instead of `ColorScheme`, a wrong package path (`material3.tabs.Tab`), `TabRow`/`Tab` called with
+parameters that don't exist in this Compose version, custom `IconButton`/`FilterChip` wrappers duplicating
+real M3 components with wrong parameter names (conflicting top-level overloads across the two files), a
+`private fun` declared as a local function (illegal — desynced the parser for the rest of the file), `by
+remember { mutableStateOf(...) }` properties accessed with stale `.value` syntax, `@Composable` functions
+(`openLink`, `markSeen`) invoked from non-composable `clickable` lambdas, and a type mix-up passing an
+`AttemptResult` into a function typed to take the wrong data class. There were also real runtime bugs beyond
+compile errors: `"%d".format(Double)` (crashes at runtime — `IllegalFormatConversionException`) and
+`.toInt()` truncation instead of one-decimal band display. None of this was caught because `compileDebugKotlin`
+was apparently never actually run against the final files. **Lesson: always run the real compiler after
+an opencode/dsh delegation, never trust "should compile" — see the CLAUDE.md delegation rule.**
+Both files were rewritten clean rather than patched bug-by-bug given the density of issues.
+
+### Redesigned as a space switcher, not a bolted-on screen
+Aman's call: don't wire IELTS/News in as just another pushed route off Settings — it'd read as two
+unrelated apps mashed together. Instead: a top-level **space switcher** (`AppSpace.MINDCORE` /
+`AppSpace.ABROAD`), reusing the existing `PillTabs` component (`Components.kt`) so it's visually native
+to the app, not a new pattern. The pill sits at the top of each space's home screen (`ForYouScreen`'s
+Today tab, and the new `AbroadHomeScreen`) — same place, same look, both sides reachable from either.
+- `MindCoreApp.kt`: added `space`/`abroadTab` state; the root `when` now branches on `space` before `tab`;
+  `BottomBar` (`Chrome.kt`) takes a `tabs` param (defaulted to the existing MindCore set) so the Abroad
+  space gets its own bottom tabs (Home / Practice / News) through the *same* glass chrome, not a new one.
+  The floating "+" capture button is repurposed per space (capture sheet in MindCore, jump-to-Practice in
+  Abroad) rather than duplicating the bottom bar.
+- `AbroadHomeScreen.kt` (new): the Abroad space's "Today" — IELTS overall-band `HeroCard` (tap → Practice),
+  quick-action row, latest 3 unseen news items, link out to the "MS Abroad Plan" doc. `IeltsScreen`/
+  `NewsScreen` had their back-arrow header removed (they're bottom-tab peers now, not pushed modals) and
+  point-fixed as above.
+- Per Aman's ask, foreground icon buttons (header actions, toggles) now use a real frosted-glass surface
+  instead of a flat `surfaceContainerHigh` circle: new `GlassIconButton` in `Chrome.kt`, reusing the same
+  `drawBackdrop`/`vibrancy`/`blur`/`lens` recipe `CaptureButton` already used for the bottom bar's "+".
+  Applied to `ForYouScreen`'s Header (Graph/Calendar/Settings), `AbroadHomeScreen`'s "open plan" button,
+  and `NewsScreen`'s unseen-toggle. Uses a fixed tint rather than the bottom bar's adaptive-contrast
+  sampling (that needs its own recorded backdrop layer per floating element — skipped for now, glass
+  itself gives enough separation from content). **Not yet applied:** GraphScreen/CalendarScreen/ItemScreen's
+  own back-arrow chrome and other existing icon buttons elsewhere in the app — same treatment, follow-up pass.
+- Verified: `./gradlew :app:compileDebugKotlin` and `:app:assembleDebug` both green. No device reachable
+  from this sandbox (`adb devices` empty even with USB debugging on) — **on-device install + visual check
+  still needed on Aman's end** before this ships (`./gradlew :app:installDebug` or reinstall from Android
+  Studio), especially the space switcher's tap targets and the glass buttons' contrast in both themes.
+
+### University News
+- **Schema** (`migrations/0013_news.sql`): `uni_news` (university, country, source_url, headline, summary, kind,
+  seen flag).
+- **Backend** (`src/news.ts`): `/v1/news` (list, `?unseen=1` filter), `/v1/news/:id/seen`, and
+  `/v1/brain/news/ingest` (brain-token only, dedupes by `sha1(source_url+headline)`) — fed by Firecrawl monitors
+  watching the MS Abroad Plan shortlist's admissions/fees/scholarship pages (Ireland + NZ set up 2026-09-30,
+  weekly cadence; Netherlands/Germany pages need their exact scholarship-page URLs confirmed before adding —
+  the research only had domain-level references for those, not deep links).
+  Diffs still need a small step to turn a raw monitor check into `uni_news` rows (an LLM call to turn "this text
+  changed" into a `{headline, summary, kind}` — not built yet, monitors are running and collecting diffs in the
+  meantime).
+- **Android UI** (`ui/NewsScreen.kt`): delegated alongside IeltsScreen.kt in the same opencode run.
+
+### Integration still needed (not delegated — done by hand, small and risky enough to keep control of)
+- Wire `IeltsScreen`/`NewsScreen` into `MindCoreApp.kt`'s route stack (`push("ielts")`, `push("news")`) and add
+  entry points (buttons) somewhere on `ForYouScreen` or `SettingsScreen`.
+- A real device/build check after wiring (`./gradlew :app:assembleDebug` + install), since opencode only ran
+  `compileDebugKotlin`.
+- The diff→`uni_news` ingestion step for the Firecrawl monitors above.

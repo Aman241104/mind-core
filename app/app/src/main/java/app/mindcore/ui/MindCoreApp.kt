@@ -99,6 +99,8 @@ fun MindCoreApp() {
 
     MaterialTheme(colorScheme = scheme, typography = app.mindcore.ui.theme.LotusTypography) {
         var tab by rememberSaveable { mutableIntStateOf(0) }
+        var space by rememberSaveable { mutableStateOf(AppSpace.MINDCORE) }
+        var abroadTab by rememberSaveable { mutableIntStateOf(0) }
         val libraryQuery = remember { LibraryQuery() }
         var showCapture by rememberSaveable { mutableStateOf(false) }
         // Screens above the tabs, as a back stack of routes: "settings", "glass", "blob", "calendar", "review",
@@ -169,9 +171,30 @@ fun MindCoreApp() {
                             top?.startsWith("graph") == true -> GraphScreen(api!!, onBack = ::pop, onOpen = { id -> push("item:$id") },
                                 focus = arg?.ifBlank { null }, onOpenNote = { id -> push("note:$id") })
                             top == "calendar" -> CalendarScreen(api!!, onBack = ::pop, onOpen = { id -> openAny(id) })
+                            space == AppSpace.ABROAD && api == null -> Column(Modifier.fillMaxSize()) {
+                                Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+                                SpaceSwitcher(space, { space = it }, modifier = Modifier.padding(top = 8.dp))
+                                Box(Modifier.padding(16.dp)) {
+                                    MessageCard("Not connected yet", "Pair this phone from the laptop with `mindcore pair`.")
+                                }
+                            }
+                            space == AppSpace.ABROAD -> when (abroadTab) {
+                                0 -> AbroadHomeScreen(
+                                    api = api!!, space = space, onSpace = { space = it },
+                                    backdrop = backdrop, glass = settings.glass, dark = dark,
+                                    onOpenPractice = { abroadTab = 1 }, onOpenNews = { abroadTab = 2 },
+                                )
+                                1 -> IeltsScreen(api!!)
+                                else -> NewsScreen(api!!, backdrop = backdrop, glass = settings.glass, dark = dark)
+                            }
                             tab == 0 -> ForYouScreen(
                                 library,
                                 updates,
+                                space = space,
+                                onSpace = { space = it },
+                                backdrop = backdrop,
+                                glass = settings.glass,
+                                dark = dark,
                                 onSettings = { push("settings") },
                                 onOpen = { id -> openAny(id) },
                                 onOpenKind = { k -> libraryQuery.clear(); libraryQuery.kinds = setOfNotNull(k); tab = 1 },
@@ -190,7 +213,7 @@ fun MindCoreApp() {
                         }
                     }
                 }
-                if (top == null) {
+                if (top == null && space == AppSpace.MINDCORE) {
                     // Pass a lambda that reads the state (not the Int), so the glass puck sees every change.
                     BottomBar(
                         selected = { tab },
@@ -203,6 +226,20 @@ fun MindCoreApp() {
                         dark = dark,
                         modifier = Modifier.align(Alignment.BottomCenter),
                         onCapture = { showCapture = true },
+                    )
+                } else if (top == null && space == AppSpace.ABROAD && library.api != null) {
+                    BottomBar(
+                        selected = { abroadTab },
+                        onSelect = { index ->
+                            if (settings.haptics && index != abroadTab) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                            abroadTab = index
+                        },
+                        backdrop = backdrop,
+                        style = settings.glass,
+                        dark = dark,
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                        tabs = abroadTabs,
+                        onCapture = { abroadTab = 1 },
                     )
                 }
                 if (showCapture) {

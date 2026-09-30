@@ -19,9 +19,11 @@ import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,6 +39,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.mindcore.settings.GlassStyle
 import app.mindcore.ui.glass.GlassLook
@@ -56,6 +60,12 @@ internal val tabs = listOf(
     "Library" to Icons.AutoMirrored.Rounded.List,
     "Notes" to Icons.Rounded.EditNote,
     "Ask" to Icons.Rounded.Search,
+)
+
+internal val abroadTabs = listOf(
+    "Home" to Icons.Rounded.Home,
+    "Practice" to Icons.Rounded.EditNote,
+    "News" to Icons.Rounded.Notifications,
 )
 
 /** Soft wallpaper-colored light behind the content, so the glass has color to refract. */
@@ -131,6 +141,7 @@ internal fun BottomBar(
     style: GlassStyle,
     dark: Boolean,
     modifier: Modifier,
+    tabs: List<Pair<String, ImageVector>> = app.mindcore.ui.tabs,
     onCapture: () -> Unit = {},
 ) {
     val container = MaterialTheme.colorScheme.surfaceContainerHigh
@@ -168,6 +179,38 @@ internal fun BottomBar(
         Spacer(Modifier.width(12.dp))
         CaptureButton(backdrop, buttonLook, contentColor, onCapture)
     }
+}
+
+/** A small round glass icon button, for foreground chrome (header actions, toggles) over scrolling content. */
+@Composable
+fun GlassIconButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    backdrop: Backdrop,
+    look: GlassLook,
+    modifier: Modifier = Modifier,
+    size: Dp = 44.dp,
+    tint: Color = LocalContentColor.current,
+) {
+    Box(
+        modifier
+            .size(size)
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { Capsule() },
+                effects = {
+                    if (look.vibrancy) vibrancy()
+                    blur(look.blurDp.dp.toPx())
+                    lens(look.lensHeightDp.dp.toPx() * 0.66f, look.lensAmountDp.dp.toPx() * 1.33f,
+                        depthEffect = look.depthEffect, chromaticAberration = look.chromaticAberration)
+                },
+                highlight = { look.highlight },
+                onDrawSurface = { drawRect(look.surface) },
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(size * 0.5f)) }
 }
 
 /** Round glass "+" beside the tabs, like Convx's search button. Opens the capture sheet. */
