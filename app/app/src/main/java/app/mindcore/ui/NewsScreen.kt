@@ -56,11 +56,10 @@ import app.mindcore.data.UniNews
 import kotlinx.coroutines.launch
 
 @Composable
-fun NewsScreen(api: Api, backdrop: com.kyant.backdrop.Backdrop, glass: app.mindcore.settings.GlassStyle, dark: Boolean) {
+fun NewsScreen(api: Api) {
     val scheme = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val look = glass.look(dark)
     var newsList by remember { mutableStateOf<List<UniNews>>(emptyList()) }
     var newsError by remember { mutableStateOf<String?>(null) }
     var showUnseenOnly by rememberSaveable { mutableStateOf(false) }
@@ -80,13 +79,16 @@ fun NewsScreen(api: Api, backdrop: com.kyant.backdrop.Backdrop, glass: app.mindc
 
     Column(modifier = Modifier.fillMaxSize().background(scheme.surface)) {
         Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+        Spacer(Modifier.height(64.dp))
 
         Row(modifier = Modifier.padding(start = 20.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Text("University News", modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold,
                 color = scheme.onSurface)
-            GlassIconButton(Icons.Rounded.Notifications, "Toggle unseen", { showUnseenOnly = !showUnseenOnly }, backdrop, look,
+            Icon(Icons.Rounded.Notifications, contentDescription = "Toggle unseen",
+                modifier = Modifier.clip(CircleShape).background(scheme.surfaceContainerHigh)
+                    .clickable { showUnseenOnly = !showUnseenOnly }.padding(12.dp).size(24.dp),
                 tint = if (showUnseenOnly) scheme.primary else scheme.onSurface)
         }
 

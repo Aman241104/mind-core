@@ -134,6 +134,7 @@ fun NotesScreen(api: Api?, state: NotesState, onOpen: (String) -> Unit, onNew: (
             verticalItemSpacing = 10.dp,
         ) {
             item(span = StaggeredGridItemSpan.FullLine) { Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars)) }
+            item(span = StaggeredGridItemSpan.FullLine) { Spacer(Modifier.height(64.dp)) }
             item(span = StaggeredGridItemSpan.FullLine) {
                 Row(Modifier.padding(start = 6.dp, top = 20.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {

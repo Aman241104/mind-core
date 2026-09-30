@@ -128,6 +128,20 @@ data class UniNews(
     val seen: Boolean,
 )
 
+data class PlanAction(val id: String, val whenText: String, val action: String, val why: String?)
+
+data class PlanUniversity(
+    val id: String, val rank: Int, val name: String, val country: String,
+    val tuition: String?, val scholarship: String?, val whyFits: String?, val wishlisted: Boolean,
+)
+
+data class PlanMarket(val id: String, val country: String, val postStudyVisa: String, val outlook: String, val sourceNote: String?)
+
+data class PlanScholarship(
+    val id: String, val name: String, val place: String,
+    val amount: String?, val eligibility: String?, val deadline: String?,
+)
+
 class ApiError(message: String) : Exception(message)
 
 data class AskSource(val n: Int, val type: String, val itemId: String?, val url: String?, val title: String, val kind: String?, val noteId: String? = null)
@@ -506,7 +520,7 @@ class Api(private val baseUrl: String, private val token: String) {
 
     suspend fun ieltsResources(skill: String? = null): List<IeltsResource> {
         val path = "/v1/ielts/resources" + (skill?.let { "?skill=$it" } ?: "")
-        val arr = JSONArray(call("GET", path))
+        val arr = JSONObject(call("GET", path)).getJSONArray("resources")
         return (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             IeltsResource(
@@ -519,7 +533,7 @@ class Api(private val baseUrl: String, private val token: String) {
 
     suspend fun ieltsTasks(skill: String? = null, taskType: String? = null): List<IeltsTask> {
         val q = listOfNotNull(skill?.let { "skill=$it" }, taskType?.let { "task_type=$it" }).joinToString("&")
-        val arr = JSONArray(call("GET", "/v1/ielts/tasks" + if (q.isEmpty()) "" else "?$q"))
+        val arr = JSONObject(call("GET", "/v1/ielts/tasks" + if (q.isEmpty()) "" else "?$q")).getJSONArray("tasks")
         return (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             IeltsTask(
@@ -555,7 +569,7 @@ class Api(private val baseUrl: String, private val token: String) {
 
     suspend fun ieltsAttempts(skill: String? = null): List<IeltsAttempt> {
         val path = "/v1/ielts/attempts" + (skill?.let { "?skill=$it" } ?: "")
-        val arr = JSONArray(call("GET", path))
+        val arr = JSONObject(call("GET", path)).getJSONArray("attempts")
         return (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             val fbStr = o.optStringOrNull("feedback")
@@ -582,7 +596,7 @@ class Api(private val baseUrl: String, private val token: String) {
 
     suspend fun news(unseenOnly: Boolean = false): List<UniNews> {
         val path = "/v1/news" + if (unseenOnly) "?unseen=1" else ""
-        val arr = JSONArray(call("GET", path))
+        val arr = JSONObject(call("GET", path)).getJSONArray("news")
         return (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             UniNews(
@@ -594,6 +608,51 @@ class Api(private val baseUrl: String, private val token: String) {
     }
 
     suspend fun markNewsSeen(id: String) { call("POST", "/v1/news/$id/seen") }
+
+    // ---------- MS Abroad Plan (in-app, no browser needed) ----------
+
+    suspend fun planActions(): List<PlanAction> {
+        val arr = JSONObject(call("GET", "/v1/plan/actions")).getJSONArray("actions")
+        return (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            PlanAction(o.getString("id"), o.getString("when_text"), o.getString("action"), o.optStringOrNull("why"))
+        }
+    }
+
+    suspend fun planUniversities(): List<PlanUniversity> {
+        val arr = JSONObject(call("GET", "/v1/plan/universities")).getJSONArray("universities")
+        return (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            PlanUniversity(
+                o.getString("id"), o.getInt("rank"), o.getString("name"), o.getString("country"),
+                o.optStringOrNull("tuition"), o.optStringOrNull("scholarship"), o.optStringOrNull("why_fits"),
+                o.optInt("wishlisted", 0) == 1,
+            )
+        }
+    }
+
+    suspend fun toggleWishlist(id: String): Boolean =
+        JSONObject(call("POST", "/v1/plan/universities/$id/wishlist")).getBoolean("wishlisted")
+
+    suspend fun planMarket(): List<PlanMarket> {
+        val arr = JSONObject(call("GET", "/v1/plan/market")).getJSONArray("market")
+        return (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            PlanMarket(o.getString("id"), o.getString("country"), o.getString("post_study_visa"),
+                o.getString("outlook"), o.optStringOrNull("source_note"))
+        }
+    }
+
+    suspend fun planScholarships(): List<PlanScholarship> {
+        val arr = JSONObject(call("GET", "/v1/plan/scholarships")).getJSONArray("scholarships")
+        return (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            PlanScholarship(
+                o.getString("id"), o.getString("name"), o.getString("place"),
+                o.optStringOrNull("amount"), o.optStringOrNull("eligibility"), o.optStringOrNull("deadline"),
+            )
+        }
+    }
 
     private fun parseIeltsFeedback(o: JSONObject): IeltsFeedback {
         val strengthsArr = o.optJSONArray("strengths") ?: JSONArray()

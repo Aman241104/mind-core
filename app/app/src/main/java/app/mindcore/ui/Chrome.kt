@@ -23,7 +23,6 @@ import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -181,7 +180,13 @@ internal fun BottomBar(
     }
 }
 
-/** A small round glass icon button, for foreground chrome (header actions, toggles) over scrolling content. */
+/**
+ * A small round glass icon button, for floating chrome (a top bar's actions) that sits OUTSIDE the
+ * `layerBackdrop`-recorded content tree, as a sibling to it — same as [BottomBar]/[CaptureButton]. Using
+ * this from a composable that is itself inside the recorded tree creates a layer that samples itself,
+ * which recurses without end and crashes the RenderThread with a stack overflow. Don't nest it in
+ * scrolling screen content; it must float above/after it in z-order at the same level as the bottom bar.
+ */
 @Composable
 fun GlassIconButton(
     icon: ImageVector,
@@ -191,7 +196,7 @@ fun GlassIconButton(
     look: GlassLook,
     modifier: Modifier = Modifier,
     size: Dp = 44.dp,
-    tint: Color = LocalContentColor.current,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     Box(
         modifier

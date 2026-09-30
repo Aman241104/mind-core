@@ -168,6 +168,7 @@ fun AskScreen(state: AskState, api: Api?, research: Research, onOpenItem: (Strin
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item { Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars)) }
+            item { Spacer(Modifier.height(64.dp)) }
             item {
                 Column(Modifier.padding(start = 4.dp, top = 16.dp, bottom = 4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {

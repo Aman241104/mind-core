@@ -28,8 +28,6 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -97,19 +95,16 @@ fun IeltsScreen(api: Api) {
 
     Column(modifier = Modifier.fillMaxSize().background(scheme.surface)) {
         Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+        Spacer(Modifier.height(64.dp))
 
         Text("IELTS Prep", modifier = Modifier.padding(start = 20.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
             style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = scheme.onSurface)
 
-        TabRow(selectedTabIndex = tab,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp),
-            containerColor = Color.Transparent,
-            contentColor = scheme.primary) {
-            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Progress", style = MaterialTheme.typography.labelLarge) })
-            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Study Plan", style = MaterialTheme.typography.labelLarge) })
-            Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Practice", style = MaterialTheme.typography.labelLarge) })
-            Tab(selected = tab == 3, onClick = { tab = 3 }, text = { Text("History", style = MaterialTheme.typography.labelLarge) })
-        }
+        PillTabs(
+            options = listOf(0 to "Progress", 1 to "Study Plan", 2 to "Practice", 3 to "History"),
+            selected = tab, onSelect = { tab = it },
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
 
         when (tab) {
             0 -> ProgressTab(progress, progressError, scheme)
@@ -294,9 +289,9 @@ fun TaskCard(task: IeltsTask, api: Api, scheme: ColorScheme) {
         if (expanded) {
             Text("Prompt:", style = MaterialTheme.typography.labelLarge, color = scheme.primary)
             Text(task.prompt, style = MaterialTheme.typography.bodySmall, color = scheme.onSurface)
-            if (task.taskType == "writing" || task.taskType == "speaking") {
+            if (task.skill == "writing" || task.skill == "speaking") {
                 WritingSpeakingSubmission(task, api, scheme)
-            } else if (task.taskType == "reading" || task.taskType == "listening") {
+            } else if (task.skill == "reading" || task.skill == "listening") {
                 ReadingListeningSubmission(task, api, scheme)
             }
         }

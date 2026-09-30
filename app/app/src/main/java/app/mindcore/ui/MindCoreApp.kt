@@ -12,10 +12,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -23,6 +25,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -171,6 +176,7 @@ fun MindCoreApp() {
                             top?.startsWith("graph") == true -> GraphScreen(api!!, onBack = ::pop, onOpen = { id -> push("item:$id") },
                                 focus = arg?.ifBlank { null }, onOpenNote = { id -> push("note:$id") })
                             top == "calendar" -> CalendarScreen(api!!, onBack = ::pop, onOpen = { id -> openAny(id) })
+                            top == "plan" -> PlanScreen(api!!, onBack = ::pop)
                             space == AppSpace.ABROAD && api == null -> Column(Modifier.fillMaxSize()) {
                                 Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
                                 SpaceSwitcher(space, { space = it }, modifier = Modifier.padding(top = 8.dp))
@@ -180,26 +186,19 @@ fun MindCoreApp() {
                             }
                             space == AppSpace.ABROAD -> when (abroadTab) {
                                 0 -> AbroadHomeScreen(
-                                    api = api!!, space = space, onSpace = { space = it },
-                                    backdrop = backdrop, glass = settings.glass, dark = dark,
+                                    api = api!!,
                                     onOpenPractice = { abroadTab = 1 }, onOpenNews = { abroadTab = 2 },
+                                    onOpenPlan = { push("plan") },
                                 )
                                 1 -> IeltsScreen(api!!)
-                                else -> NewsScreen(api!!, backdrop = backdrop, glass = settings.glass, dark = dark)
+                                else -> NewsScreen(api!!)
                             }
                             tab == 0 -> ForYouScreen(
                                 library,
                                 updates,
-                                space = space,
-                                onSpace = { space = it },
-                                backdrop = backdrop,
-                                glass = settings.glass,
-                                dark = dark,
-                                onSettings = { push("settings") },
                                 onOpen = { id -> openAny(id) },
                                 onOpenKind = { k -> libraryQuery.clear(); libraryQuery.kinds = setOfNotNull(k); tab = 1 },
                                 onCalendar = { push("calendar") },
-                                onGraph = { push("graph") },
                                 notes = notes,
                                 onOpenNote = { id -> push("note:$id") },
                                 onSeeNotes = { f -> notes.filter = f; tab = 2 },
@@ -241,6 +240,30 @@ fun MindCoreApp() {
                         tabs = abroadTabs,
                         onCapture = { abroadTab = 1 },
                     )
+                }
+                if (top == null) {
+                    val look = settings.glass.look(dark)
+                    Row(
+                        Modifier.fillMaxWidth().align(Alignment.TopCenter)
+                            .windowInsetsPadding(WindowInsets.statusBars)
+                            .padding(start = 20.dp, end = 16.dp, top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SpaceSwitcher(space, { space = it }, modifier = Modifier.weight(1f))
+                        when {
+                            space == AppSpace.MINDCORE && tab == 0 -> {
+                                GlassIconButton(Icons.Rounded.Hub, "Graph", { push("graph") }, backdrop, look)
+                                Spacer(Modifier.width(8.dp))
+                                GlassIconButton(Icons.Rounded.DateRange, "Calendar", { push("calendar") }, backdrop, look)
+                                Spacer(Modifier.width(8.dp))
+                                GlassIconButton(Icons.Rounded.Settings, "Settings", { push("settings") }, backdrop, look)
+                            }
+                            space == AppSpace.ABROAD && abroadTab == 0 -> GlassIconButton(
+                                Icons.AutoMirrored.Rounded.OpenInNew, "Your MS Abroad Plan",
+                                { push("plan") }, backdrop, look,
+                            )
+                        }
+                    }
                 }
                 if (showCapture) {
                     val capturer = remember(library) { library.api?.let { Capturer(context.applicationContext, it) } }

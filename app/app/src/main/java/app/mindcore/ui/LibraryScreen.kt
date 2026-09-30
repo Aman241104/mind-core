@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -126,6 +127,7 @@ fun LibraryScreen(library: Library, query: LibraryQuery, onOpen: (String) -> Uni
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 140.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars)) }
+            item { Spacer(Modifier.height(64.dp)) }
             item {
                 Column(Modifier.padding(start = 4.dp, top = 24.dp)) {
                     Text("Library", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)

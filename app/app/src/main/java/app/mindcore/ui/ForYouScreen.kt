@@ -76,16 +76,9 @@ import java.time.temporal.ChronoUnit
 fun ForYouScreen(
     library: Library,
     updates: UpdateState,
-    space: AppSpace,
-    onSpace: (AppSpace) -> Unit,
-    backdrop: com.kyant.backdrop.Backdrop,
-    glass: app.mindcore.settings.GlassStyle,
-    dark: Boolean,
-    onSettings: () -> Unit,
     onOpen: (String) -> Unit,
     onOpenKind: (String?) -> Unit,
     onCalendar: () -> Unit,
-    onGraph: () -> Unit,
     notes: NotesState = remember { NotesState() },
     onOpenNote: (String) -> Unit = {},
     onSeeNotes: (filter: String) -> Unit = {},
@@ -113,8 +106,8 @@ fun ForYouScreen(
     PullToRefreshBox(isRefreshing = library.loading, onRefresh = { scope.launch { library.refresh() } }) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 140.dp)) {
             item { Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars)) }
-            item { SpaceSwitcher(space, onSpace, modifier = Modifier.padding(top = 8.dp)) }
-            item { Header(onSettings, onCalendar, onGraph, backdrop, glass.look(dark)) }
+            item { Spacer(Modifier.height(64.dp)) }
+            item { Header() }
             item { UpdateBanner(updates, Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) }
             item { Processing(library) }
             if (!library.paired) item {
@@ -237,10 +230,7 @@ fun ForYouScreen(
 }
 
 @Composable
-private fun Header(
-    onSettings: () -> Unit, onCalendar: () -> Unit, onGraph: () -> Unit,
-    backdrop: com.kyant.backdrop.Backdrop, look: app.mindcore.ui.glass.GlassLook,
-) {
+private fun Header() {
     Row(Modifier.padding(start = 20.dp, end = 16.dp, top = 20.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
@@ -249,11 +239,6 @@ private fun Header(
             )
             Text("Today", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
         }
-        GlassIconButton(Icons.Rounded.Hub, "Graph", onGraph, backdrop, look)
-        Spacer(Modifier.width(8.dp))
-        GlassIconButton(Icons.Rounded.DateRange, "Calendar", onCalendar, backdrop, look)
-        Spacer(Modifier.width(8.dp))
-        GlassIconButton(Icons.Rounded.Settings, "Settings", onSettings, backdrop, look)
     }
 }
 

@@ -2,6 +2,7 @@ package app.mindcore.ui
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
@@ -17,8 +18,11 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,7 +33,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +49,9 @@ import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -55,15 +64,46 @@ import androidx.compose.ui.unit.dp
 /** The app's two top-level spaces, switched from a pill at the top of each space's home screen. */
 enum class AppSpace { MINDCORE, ABROAD }
 
+/** A sliding segmented toggle: one track, a solid thumb that glides to whichever label is selected. */
 @Composable
 fun SpaceSwitcher(selected: AppSpace, onSelect: (AppSpace) -> Unit, modifier: Modifier = Modifier) {
-    PillTabs(
-        options = listOf(AppSpace.MINDCORE to "MindCore", AppSpace.ABROAD to "Study Abroad"),
-        selected = selected,
-        onSelect = onSelect,
-        modifier = modifier,
-        contentPadding = PaddingValues(start = 20.dp, end = 16.dp, top = 12.dp),
-    )
+    val scheme = MaterialTheme.colorScheme
+    val options = remember { listOf(AppSpace.MINDCORE to "MindCore", AppSpace.ABROAD to "Abroad") }
+    val density = LocalDensity.current
+    // (x, width, height) in px, per segment — all segments share the same height, captured alongside each.
+    var segments by remember { mutableStateOf(List(options.size) { Triple(0f, 0f, 0f) }) }
+    val selectedIndex = options.indexOfFirst { it.first == selected }
+    val (thumbXPx, thumbWPx, thumbHPx) = segments.getOrElse(selectedIndex) { Triple(0f, 0f, 0f) }
+    val thumbX by animateDpAsState(with(density) { thumbXPx.toDp() }, label = "thumbX")
+    val thumbW by animateDpAsState(with(density) { thumbWPx.toDp() }, label = "thumbW")
+    val thumbH = with(density) { thumbHPx.toDp() }
+
+    Box(modifier.clip(RoundedCornerShape(50)).background(scheme.surfaceContainerHighest).padding(4.dp)) {
+        if (thumbWPx > 0f) {
+            Box(
+                Modifier.offset(x = thumbX).width(thumbW).height(thumbH)
+                    .clip(RoundedCornerShape(50)).background(scheme.inverseSurface),
+            )
+        }
+        Row {
+            options.forEachIndexed { index, (value, label) ->
+                val on = value == selected
+                val fg by animateColorAsState(if (on) scheme.inverseOnSurface else scheme.onSurface, label = "spaceFg")
+                Text(
+                    label, style = MaterialTheme.typography.labelLarge, color = fg,
+                    modifier = Modifier
+                        .onGloballyPositioned { c ->
+                            val next = segments.toMutableList()
+                            next[index] = Triple(c.positionInParent().x, c.size.width.toFloat(), c.size.height.toFloat())
+                            segments = next
+                        }
+                        .clip(RoundedCornerShape(50))
+                        .clickable { onSelect(value) }
+                        .padding(horizontal = 18.dp, vertical = 10.dp),
+                )
+            }
+        }
+    }
 }
 
 /** Card shape with a round notch at the bottom-right that hugs a button of [buttonSize] + [gap]. */

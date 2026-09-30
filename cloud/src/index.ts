@@ -12,6 +12,7 @@ import { createNote, deleteNote, getNote, listNotes, noteFromVoice, brainstorm, 
 import { ask, claimResearch, createResearch, finishResearch, getResearch, indexSaves, reindex } from "./ask.ts";
 import { getTask, listAttempts, listResources, listTasks, progress, seedContent, submitAttempt } from "./ielts.ts";
 import { ingestNews, listNews, markSeen } from "./news.ts";
+import { listPlanActions, listPlanMarket, listPlanScholarships, listPlanUniversities, seedPlan, toggleWishlist } from "./plan.ts";
 
 export interface Env {
   DB: D1Database;
@@ -58,6 +59,7 @@ export default {
         if (path === "/v1/brain/research/claim" && req.method === "POST") return await claimResearch(env);
         if (path === "/v1/brain/ielts/seed" && req.method === "POST") return await seedContent(req, env);
         if (path === "/v1/brain/news/ingest" && req.method === "POST") return await ingestNews(req, env);
+        if (path === "/v1/brain/plan/seed" && req.method === "POST") return await seedPlan(req, env);
         const done = path.match(/^\/v1\/brain\/research\/(\d+)$/);
         if (done && req.method === "POST") return await finishResearch(Number(done[1]), req, env);
         const fix = path.match(/^\/v1\/brain\/items\/([0-9a-f]{16})$/);
@@ -108,6 +110,12 @@ export default {
       const ieltsTask = path.match(/^\/v1\/ielts\/tasks\/([0-9a-f-]+)$/);
       if (ieltsTask && req.method === "GET") return await getTask(ieltsTask[1], env);
       if (path === "/v1/news" && req.method === "GET") return await listNews(url, env);
+      if (path === "/v1/plan/actions" && req.method === "GET") return await listPlanActions(env);
+      if (path === "/v1/plan/universities" && req.method === "GET") return await listPlanUniversities(env);
+      if (path === "/v1/plan/market" && req.method === "GET") return await listPlanMarket(env);
+      if (path === "/v1/plan/scholarships" && req.method === "GET") return await listPlanScholarships(env);
+      const wishlist = path.match(/^\/v1\/plan\/universities\/([0-9a-f-]+)\/wishlist$/);
+      if (wishlist && req.method === "POST") return await toggleWishlist(wishlist[1], env);
       const newsSeen = path.match(/^\/v1\/news\/([0-9a-f]+)\/seen$/);
       if (newsSeen && req.method === "POST") return await markSeen(newsSeen[1], env);
       const dl = path.match(/^\/v1\/items\/([0-9a-f]{16})\/(deadline|find-deadline)$/);

@@ -18,11 +18,11 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material3.CircularProgressIndicator
@@ -46,22 +46,39 @@ import app.mindcore.data.Api
 import app.mindcore.data.IeltsProgress
 import app.mindcore.data.UniNews
 
-private const val PLAN_URL = "https://claude.ai/artifact/8ukn5f94BgwociEUGWscEM"
+private data class ShortlistCountry(val flag: String, val name: String, val hook: String)
+
+private val shortlist = listOf(
+    ShortlistCountry("🇮🇪", "Ireland", "GOI-IES + conversion MScs"),
+    ShortlistCountry("🇳🇱", "Netherlands", "Orange Tulip + Holland"),
+    ShortlistCountry("🇩🇪", "Germany", "Tuition-free + DAAD STEM"),
+    ShortlistCountry("🇳🇿", "New Zealand", "Auckland/Wellington scholarships"),
+    ShortlistCountry("🇫🇮", "Finland/Sweden", "Aalto + SI scholarships"),
+)
+
+@Composable
+private fun ShortlistCard(country: ShortlistCountry) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        Modifier.width(160.dp).clip(RoundedCornerShape(18.dp)).background(scheme.surfaceContainerHigh)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(country.flag, style = MaterialTheme.typography.headlineSmall)
+        Text(country.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = scheme.onSurface)
+        Text(country.hook, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+    }
+}
 
 @Composable
 fun AbroadHomeScreen(
     api: Api,
-    space: AppSpace,
-    onSpace: (AppSpace) -> Unit,
-    backdrop: com.kyant.backdrop.Backdrop,
-    glass: app.mindcore.settings.GlassStyle,
-    dark: Boolean,
     onOpenPractice: () -> Unit,
     onOpenNews: () -> Unit,
+    onOpenPlan: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     val context = LocalContext.current
-    val look = glass.look(dark)
 
     var progress by remember { mutableStateOf<IeltsProgress?>(null) }
     var news by remember { mutableStateOf<List<UniNews>>(emptyList()) }
@@ -76,16 +93,12 @@ fun AbroadHomeScreen(
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 140.dp)) {
         item { Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars)) }
-        item { SpaceSwitcher(space, onSpace, modifier = Modifier.padding(top = 8.dp)) }
+        item { Spacer(Modifier.height(64.dp)) }
 
         item {
-            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 20.dp, bottom = 20.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Sept 2027 intake", style = MaterialTheme.typography.labelLarge, color = scheme.primary)
-                    Text("Study Abroad", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-                }
-                GlassIconButton(Icons.AutoMirrored.Rounded.OpenInNew, "Your MS Abroad Plan", { openLink(context, PLAN_URL) }, backdrop, look)
+            Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 20.dp, bottom = 20.dp)) {
+                Text("Sept 2027 intake", style = MaterialTheme.typography.labelLarge, color = scheme.primary)
+                Text("Abroad", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -116,6 +129,19 @@ fun AbroadHomeScreen(
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 QuickAction(Icons.Rounded.EditNote, "Practice", Modifier.weight(1f), onOpenPractice)
                 QuickAction(Icons.Rounded.School, "Study plan", Modifier.weight(1f), onOpenPractice)
+            }
+        }
+
+        item {
+            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 4.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Shortlist", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("Full plan", style = MaterialTheme.typography.labelLarge, color = scheme.primary,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).clickable(onClick = onOpenPlan).padding(horizontal = 10.dp, vertical = 6.dp))
+            }
+        }
+        item {
+            LazyRow(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(shortlist) { country -> ShortlistCard(country) }
             }
         }
 
